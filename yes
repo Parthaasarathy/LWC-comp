@@ -1,13 +1,11 @@
 public with sharing class GetContractData {
     @AuraEnabled(cacheable=true)
     public static List<Contract> getCurrentMonthContracts(Integer month, Integer year) {
-        // Calculate the start and end dates for the given month and year
         Date startDate = Date.newInstance(year, month, 1);
         Date endDate = startDate.addMonths(1).addDays(-1);
 
-        // Query to retrieve contracts where the Renewal Date is within the calculated start and end dates
         return [
-            SELECT ContractNumber, Change__c, AccountId, Current_Premium__c, Group_ID__c, No_of_Active_Members__c,
+            SELECT ContractNumber, Change__c, Account.Name, AccountId, Current_Premium__c, Group_ID__c, No_of_Active_Members__c,
                    No_of_Employees__c, Open_Enrollment_Status__c, Renewal_Date__c, Renewal_Iterations__c, Renewal_Premium__c,
                    Renewal_Status__c
             FROM Contract
@@ -17,16 +15,24 @@ public with sharing class GetContractData {
 }
 
 
-import { LightningElement, track } from 'lwc';
+import { LightningElement, track, wire } from 'lwc';
 import getCurrentMonthContracts from '@salesforce/apex/GetContractData.getCurrentMonthContracts';
 
 export default class ContractTabs extends LightningElement {
     @track months = [];
-    columns = [
-        { label: 'Account Name', fieldName: 'AccountId', type: 'text' },
+    @track activeTab = '';
+    @track contracts = [];
+    @track columns = [
+        { label: 'Account Name', fieldName: 'AccountName', type: 'text' },
+        { label: 'Group ID', fieldName: 'Group_ID__c', type: 'text' },
         { label: 'Renewal Date', fieldName: 'Renewal_Date__c', type: 'date' },
-        { label: 'Contract Number', fieldName: 'ContractNumber', type: 'text' },
-        { label: 'Group ID', fieldName: 'Group_ID__c', type: 'text' }
+        { label: 'No of Employees', fieldName: 'No_of_Employees__c', type: 'number' },
+        { label: 'No of Active Members', fieldName: 'No_of_Active_Members__c', type: 'number' },
+        { label: 'Current Premium', fieldName: 'Current_Premium__c', type: 'currency' },
+        { label: 'Renewal Premium', fieldName: 'Renewal_Premium__c', type: 'currency' },
+        { label: 'Renewal Status', fieldName: 'Renewal_Status__c', type: 'text' },
+        { label: 'Open Enrollment Status', fieldName: 'Open_Enrollment_Status__c', type: 'text' },
+        { label: 'Renewal Iterations', fieldName: 'Renewal_Iterations__c', type: 'number' }
     ];
 
     connectedCallback() {
@@ -39,34 +45,51 @@ export default class ContractTabs extends LightningElement {
             let date = new Date(today.getFullYear(), today.getMonth() + i, 1);
             this.months.push({
                 label: `${date.toLocaleString('default', { month: 'long' })} ${date.getFullYear()}`,
-                key: `${date.getFullYear()}-${date.getMonth() + 1}`,
-                contracts: [],
-                contractsDataLoaded: false
+                key: `${date.getFullYear()}-${date.getMonth() + 1}`
             });
         }
+        this.activeTab = this.months[3].key; // Set current month as the active tab
+        this.loadContracts(this.activeTab);
     }
 
     handleActiveTab(event) {
         const tabValue = event.detail.value;
-        const monthYear = tabValue.split('-');
-        const month = parseInt(monthYear[1]);
-        const year = parseInt(monthYear[0]);
-        this.loadContracts(month, year);
+        this.activeTab = tabValue;
+        this.loadContracts(tabValue);
     }
 
-    loadContracts(month, year) {
+    loadContracts(tabValue) {
+        const [year, month] = tabValue.split('-').map(Number);
         getCurrentMonthContracts({ month, year })
             .then(result => {
-                this.months = this.months.map(m => {
-                    if (m.key === `${year}-${month}`) {
-                        m.contracts = result;
-                        m.contractsDataLoaded = true;
-                    }
-                    return m;
-                });
+                this.contracts = result.map(contract => ({
+                    ...contract,
+                    AccountName: contract.Account.Name
+                }));
             })
             .catch(error => {
                 console.error('Error:', error);
             });
     }
 }
+
+
+<template>
+    <lightning-tabset variant="scoped" active-tab-value={activeTab} onactive={handleActiveTab}>
+        <template for:each={months} for:item="month">
+            <lightning-tab key={month.key} label={month.label} value={month.key}>
+                <lightning-datatable
+                    if:true={contracts.length}
+                    data={contracts}
+                    columns={columns}
+                    key-field="ContractNumber"
+                    hide-checkbox-column
+                    show-row-number-column>
+                </lightning-datatable>
+                <template if:false={contracts.length}>
+                    <lightning-spinner alternative-text="Loading"></lightning-spinner>
+                </template>
+            </lightning-tab>
+        </template>
+    </lightning-tabset>
+</template>
