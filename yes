@@ -1,61 +1,5 @@
-import { LightningElement, api } from 'lwc';
-
-export default class ActionDropdown extends LightningElement {
-    @api row;
-    @api rowActions;
-
-    handleAction(event) {
-        const actionName = event.detail.value;
-        const actionEvent = new CustomEvent('rowaction', {
-            detail: { actionName, row: this.row }
-        });
-        this.dispatchEvent(actionEvent);
-    }
-}
-
-<template>
-    <lightning-button-menu alternative-text="Actions" onselect={handleAction}>
-        <template for:each={rowActions} for:item="action">
-            <lightning-menu-item key={action.value} label={action.label} value={action.value}></lightning-menu-item>
-        </template>
-    </lightning-button-menu>
-</template>
-
-
-
-import LightningDatatable from 'lightning/datatable';
-import customDropdown from './customDropdown.html';
-
-export default class ExtendedDatatable extends LightningDatatable {
-    static customTypes = {
-        customDropdown: {
-            template: customDropdown,
-            standardCellLayout: true,
-            typeAttributes: ['rowActions', 'row']
-        }
-    };
-}
-
-
-
-<template>
-    <lightning-datatable
-        data={data}
-        columns={columns}
-        key-field={keyField}
-        onrowaction={handleRowAction}>
-    </lightning-datatable>
-</template>
-
-
 import { LightningElement, track } from 'lwc';
 import getCurrentMonthContracts from '@salesforce/apex/GetContractData.getCurrentMonthContracts';
-
-const actions = [
-    { label: 'Start Renewal', value: 'start_renewal' },
-    { label: 'Start Open Enrollment', value: 'start_open_enrollment' },
-    { label: 'Run a Quote', value: 'run_quote' }
-];
 
 export default class ContractTabs extends LightningElement {
     @track months = [];
@@ -66,14 +10,6 @@ export default class ContractTabs extends LightningElement {
     @track openEnrollmentStatus = 'None';
 
     columns = [
-        {
-            label: 'Action',
-            type: 'customDropdown',
-            typeAttributes: {
-                rowActions: actions,
-                row: { fieldName: 'Id' }
-            }
-        },
         { label: 'Account Name', fieldName: 'AccountName', type: 'text' },
         { label: 'Group ID', fieldName: 'Group_ID__c', type: 'text' },
         { label: 'Renewal Date', fieldName: 'Renewal_Date__c', type: 'date' },
@@ -130,12 +66,12 @@ export default class ContractTabs extends LightningElement {
             return;
         }
         const [year, month] = tabValue.split('-').map(Number);
-        getCurrentMonthContracts({
-            month,
-            year,
-            searchKey: this.searchKey,
-            renewalStatus: this.renewalStatus,
-            openEnrollmentStatus: this.openEnrollmentStatus
+        getCurrentMonthContracts({ 
+            month, 
+            year, 
+            searchKey: this.searchKey, 
+            renewalStatus: this.renewalStatus, 
+            openEnrollmentStatus: this.openEnrollmentStatus 
         })
         .then(result => {
             this.contracts = result.map(contract => ({
@@ -146,23 +82,6 @@ export default class ContractTabs extends LightningElement {
         .catch(error => {
             console.error('Error:', error);
         });
-    }
-
-    handleRowAction(event) {
-        const actionName = event.detail.actionName;
-        const row = event.detail.row;
-        switch (actionName) {
-            case 'start_renewal':
-                // Handle start renewal logic here
-                break;
-            case 'start_open_enrollment':
-                // Handle start open enrollment logic here
-                break;
-            case 'run_quote':
-                // Handle run a quote logic here
-                break;
-            default:
-        }
     }
 
     get renewalStatusOptions() {
@@ -183,6 +102,7 @@ export default class ContractTabs extends LightningElement {
         ];
     }
 }
+
 
 
 <template>
@@ -219,13 +139,13 @@ export default class ContractTabs extends LightningElement {
                         </div>
                     </div>
                     <template if:true={contracts.length}>
-                        <c-extended-datatable
+                        <lightning-datatable
                             data={contracts}
                             columns={columns}
                             key-field="ContractNumber"
                             hide-checkbox-column
-                            onrowaction={handleRowAction}>
-                        </c-extended-datatable>
+                            show-row-number-column>
+                        </lightning-datatable>
                     </template>
                     <template if:false={contracts.length}>
                         <lightning-spinner alternative-text="Loading"></lightning-spinner>
