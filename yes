@@ -1,51 +1,38 @@
 public with sharing class GetContractData {
     @AuraEnabled(cacheable=true)
-    public static List<Contract> getCurrentMonthContracts(String month) {
-        return [SELECT ContractNumber, Change__c, AccountId, Current_Premium__c, Group_ID__c, No_of_Active_Members__c,
-   No_of_Employees__c, Open_Enrollment_Status__c, Renewal_Date__c, Renewal_Iterations__c, Renewal_Premium__c, 
-   Renewal_Status__c FROM Contract];
+    public static List<Contract> getCurrentMonthContracts(Integer month, Integer year) {
+        // Calculate the start and end dates for the given month and year
+        Date startDate = Date.newInstance(year, month, 1);
+        Date endDate = startDate.addMonths(1).addDays(-1);
+
+        // Query to retrieve contracts where the Renewal Date is within the calculated start and end dates
+        return [
+            SELECT ContractNumber, Change__c, AccountId, Current_Premium__c, Group_ID__c, No_of_Active_Members__c,
+                   No_of_Employees__c, Open_Enrollment_Status__c, Renewal_Date__c, Renewal_Iterations__c, Renewal_Premium__c,
+                   Renewal_Status__c
+            FROM Contract
+            WHERE Renewal_Date__c >= :startDate AND Renewal_Date__c <= :endDate
+        ];
     }
 }
 
-<template>
-    <lightning-tabset variant="scoped" active-tab-value={activeTab} onactive={handleActiveTab}>
-        <template for:each={months} for:item="month">
-            <lightning-tab key={month.key} label={month.label} value={month.key}>
-                <!-- Display the child component with contract data if data is loaded -->
-                <template if:true={month.contractsDataLoaded}>
-                    <c-child1 contracts={month.contracts} columns={columns}></c-child1 >
-                </template>
-                <!-- Optionally, directly embed a datatable here instead of using a child component -->
-                <template if:false={month.contractsDataLoaded}>
-                    <lightning-datatable
-                        data={month.contracts}
-                        columns={columns}
-                        key-field="ContractNumber"
-                        hide-checkbox-column
-                        show-row-number-column>
-                    </lightning-datatable>
-                </template>
-            </lightning-tab>
-        </template>
-    </lightning-tabset>
-</template>
 
-import { LightningElement, track, wire } from 'lwc';
+import { LightningElement, track } from 'lwc';
 import getCurrentMonthContracts from '@salesforce/apex/GetContractData.getCurrentMonthContracts';
- 
+
 export default class ContractTabs extends LightningElement {
     @track months = [];
     columns = [
-        { label: 'Account Name',fieldName: 'AccountId'},
+        { label: 'Account Name', fieldName: 'AccountId', type: 'text' },
         { label: 'Renewal Date', fieldName: 'Renewal_Date__c', type: 'date' },
-        { label: 'Contract Number',fieldName: 'ContractNumber' },
-        { label: 'Group ID', fieldName: 'Group_ID__c' },
+        { label: 'Contract Number', fieldName: 'ContractNumber', type: 'text' },
+        { label: 'Group ID', fieldName: 'Group_ID__c', type: 'text' }
     ];
- 
+
     connectedCallback() {
         this.initializeMonths();
     }
- 
+
     initializeMonths() {
         const today = new Date();
         for (let i = -3; i <= 8; i++) {
@@ -58,15 +45,17 @@ export default class ContractTabs extends LightningElement {
             });
         }
     }
- 
+
     handleActiveTab(event) {
         const tabValue = event.detail.value;
         const monthYear = tabValue.split('-');
-        this.loadContracts(parseInt(monthYear[1]), parseInt(monthYear[0]));
+        const month = parseInt(monthYear[1]);
+        const year = parseInt(monthYear[0]);
+        this.loadContracts(month, year);
     }
- 
+
     loadContracts(month, year) {
-        getCurrentMonthContracts({ month: month, year: year })
+        getCurrentMonthContracts({ month, year })
             .then(result => {
                 this.months = this.months.map(m => {
                     if (m.key === `${year}-${month}`) {
