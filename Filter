@@ -1,0 +1,160 @@
+public with sharing class GetContractData {
+    @AuraEnabled(cacheable=true)
+    public static List<Contract> getCurrentMonthContracts(Integer month, Integer year, String searchKey, String renewalStatus, String openEnrollmentStatus) {
+        Date startDate = Date.newInstance(year, month, 1);
+        Date endDate = startDate.addMonths(1).addDays(-1);
+
+        String query = 'SELECT ContractNumber, Change__c, Account.Name, AccountId, Current_Premium__c, Group_ID__c, No_of_Active_Members__c, No_of_Employees__c, Open_Enrollment_Status__c, Renewal_Date__c, Renewal_Iterations__c, Renewal_Premium__c, Renewal_Status__c FROM Contract WHERE Renewal_Date__c >= :startDate AND Renewal_Date__c <= :endDate';
+
+        if (searchKey != null && searchKey != '') {
+            query += ' AND (Account.Name LIKE \'%' + String.escapeSingleQuotes(searchKey) + '%\' OR Group_ID__c LIKE \'%' + String.escapeSingleQuotes(searchKey) + '%\')';
+        }
+
+        if (renewalStatus != null && renewalStatus != 'None') {
+            query += ' AND Renewal_Status__c = :renewalStatus';
+        }
+
+        if (openEnrollmentStatus != null && openEnrollmentStatus != 'None') {
+            query += ' AND Open_Enrollment_Status__c = :openEnrollmentStatus';
+        }
+
+        return Database.query(query);
+    }
+}
+
+
+import { LightningElement, track, wire } from 'lwc';
+import getCurrentMonthContracts from '@salesforce/apex/GetContractData.getCurrentMonthContracts';
+
+export default class ContractTabs extends LightningElement {
+    @track months = [];
+    @track activeTab = '';
+    @track contracts = [];
+    @track searchKey = '';
+    @track renewalStatus = 'None';
+    @track openEnrollmentStatus = 'None';
+
+    columns = [
+        { label: 'Account Name', fieldName: 'AccountName', type: 'text' },
+        { label: 'Group ID', fieldName: 'Group_ID__c', type: 'text' },
+        { label: 'Renewal Date', fieldName: 'Renewal_Date__c', type: 'date' },
+        { label: 'No of Employees', fieldName: 'No_of_Employees__c', type: 'number' },
+        { label: 'No of Active Members', fieldName: 'No_of_Active_Members__c', type: 'number' },
+        { label: 'Current Premium', fieldName: 'Current_Premium__c', type: 'currency' },
+        { label: 'Renewal Premium', fieldName: 'Renewal_Premium__c', type: 'currency' },
+        { label: 'Renewal Status', fieldName: 'Renewal_Status__c', type: 'text' },
+        { label: 'Open Enrollment Status', fieldName: 'Open_Enrollment_Status__c', type: 'text' },
+        { label: 'Renewal Iterations', fieldName: 'Renewal_Iterations__c', type: 'number' }
+    ];
+
+    connectedCallback() {
+        this.initializeMonths();
+    }
+
+    initializeMonths() {
+        const today = new Date();
+        for (let i = -3; i <= 8; i++) {
+            let date = new Date(today.getFullYear(), today.getMonth() + i, 1);
+            this.months.push({
+                label: `${date.toLocaleString('default', { month: 'long' })} ${date.getFullYear()}`,
+                key: `${date.getFullYear()}-${date.getMonth() + 1}`
+            });
+        }
+        this.activeTab = this.months[3].key; // Set current month as the active tab
+        this.loadContracts(this.activeTab);
+    }
+
+    handleActiveTab(event) {
+        const tabValue = event.detail.value;
+        this.activeTab = tabValue;
+        this.loadContracts(tabValue);
+    }
+
+    handleSearchKeyChange(event) {
+        this.searchKey = event.target.value;
+    }
+
+    handleRenewalStatusChange(event) {
+        this.renewalStatus = event.target.value;
+    }
+
+    handleOpenEnrollmentStatusChange(event) {
+        this.openEnrollmentStatus = event.target.value;
+    }
+
+    handleAccessShieldRenewal() {
+        this.loadContracts(this.activeTab);
+    }
+
+    loadContracts(tabValue) {
+        if (!tabValue) {
+            return;
+        }
+        const [year, month] = tabValue.split('-').map(Number);
+        getCurrentMonthContracts({ 
+            month, 
+            year, 
+            searchKey: this.searchKey, 
+            renewalStatus: this.renewalStatus, 
+            openEnrollmentStatus: this.openEnrollmentStatus 
+        })
+        .then(result => {
+            this.contracts = result.map(contract => ({
+                ...contract,
+                AccountName: contract.Account.Name
+            }));
+        })
+        .catch(error => {
+            console.error('Error:', error);
+        });
+    }
+}
+
+
+
+<template>
+    <lightning-tabset variant="scoped" active-tab-value={activeTab} onactive={handleActiveTab}>
+        <template for:each={months} for:item="month">
+            <lightning-tab key={month.key} label={month.label} value={month.key}>
+                <lightning-layout vertical-align="start" horizontal-align="space">
+                    <lightning-layout-item size="12">
+                        <lightning-input type="text" label="Search" onchange={handleSearchKeyChange}></lightning-input>
+                    </lightning-layout-item>
+                    <lightning-layout-item size="12">
+                        <lightning-combobox
+                            label="Renewal Status"
+                            value={renewalStatus}
+                            placeholder="Select Renewal Status"
+                            options={renewalStatusOptions}
+                            onchange={handleRenewalStatusChange}>
+                        </lightning-combobox>
+                    </lightning-layout-item>
+                    <lightning-layout-item size="12">
+                        <lightning-combobox
+                            label="Open Enrollment Status"
+                            value={openEnrollmentStatus}
+                            placeholder="Select Open Enrollment Status"
+                            options={openEnrollmentStatusOptions}
+                            onchange={handleOpenEnrollmentStatusChange}>
+                        </lightning-combobox>
+                    </lightning-layout-item>
+                    <lightning-layout-item size="12">
+                        <lightning-button label="Access Shield Renewal" onclick={handleAccessShieldRenewal}></lightning-button>
+                    </lightning-layout-item>
+                </lightning-layout>
+                <template if:true={contracts.length}>
+                    <lightning-datatable
+                        data={contracts}
+                        columns={columns}
+                        key-field="ContractNumber"
+                        hide-checkbox-column
+                        show-row-number-column>
+                    </lightning-datatable>
+                </template>
+                <template if:false={contracts.length}>
+                    <lightning-spinner alternative-text="Loading"></lightning-spinner>
+                </template>
+            </lightning-tab>
+        </template>
+    </lightning-tabset>
+</template>
