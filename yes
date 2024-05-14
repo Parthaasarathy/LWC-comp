@@ -1,0 +1,83 @@
+public with sharing class GetContractData {
+    @AuraEnabled(cacheable=true)
+    public static List<Contract> getCurrentMonthContracts(String month) {
+        return [SELECT ContractNumber, Change__c, AccountId, Current_Premium__c, Group_ID__c, No_of_Active_Members__c,
+   No_of_Employees__c, Open_Enrollment_Status__c, Renewal_Date__c, Renewal_Iterations__c, Renewal_Premium__c, 
+   Renewal_Status__c FROM Contract];
+    }
+}
+
+<template>
+    <lightning-tabset variant="scoped" active-tab-value={activeTab} onactive={handleActiveTab}>
+        <template for:each={months} for:item="month">
+            <lightning-tab key={month.key} label={month.label} value={month.key}>
+                <!-- Display the child component with contract data if data is loaded -->
+                <template if:true={month.contractsDataLoaded}>
+                    <c-child1 contracts={month.contracts} columns={columns}></c-child1 >
+                </template>
+                <!-- Optionally, directly embed a datatable here instead of using a child component -->
+                <template if:false={month.contractsDataLoaded}>
+                    <lightning-datatable
+                        data={month.contracts}
+                        columns={columns}
+                        key-field="ContractNumber"
+                        hide-checkbox-column
+                        show-row-number-column>
+                    </lightning-datatable>
+                </template>
+            </lightning-tab>
+        </template>
+    </lightning-tabset>
+</template>
+
+import { LightningElement, track, wire } from 'lwc';
+import getCurrentMonthContracts from '@salesforce/apex/GetContractData.getCurrentMonthContracts';
+ 
+export default class ContractTabs extends LightningElement {
+    @track months = [];
+    columns = [
+        { label: 'Account Name',fieldName: 'AccountId'},
+        { label: 'Renewal Date', fieldName: 'Renewal_Date__c', type: 'date' },
+        { label: 'Contract Number',fieldName: 'ContractNumber' },
+        { label: 'Group ID', fieldName: 'Group_ID__c' },
+    ];
+ 
+    connectedCallback() {
+        this.initializeMonths();
+    }
+ 
+    initializeMonths() {
+        const today = new Date();
+        for (let i = -3; i <= 8; i++) {
+            let date = new Date(today.getFullYear(), today.getMonth() + i, 1);
+            this.months.push({
+                label: `${date.toLocaleString('default', { month: 'long' })} ${date.getFullYear()}`,
+                key: `${date.getFullYear()}-${date.getMonth() + 1}`,
+                contracts: [],
+                contractsDataLoaded: false
+            });
+        }
+    }
+ 
+    handleActiveTab(event) {
+        const tabValue = event.detail.value;
+        const monthYear = tabValue.split('-');
+        this.loadContracts(parseInt(monthYear[1]), parseInt(monthYear[0]));
+    }
+ 
+    loadContracts(month, year) {
+        getCurrentMonthContracts({ month: month, year: year })
+            .then(result => {
+                this.months = this.months.map(m => {
+                    if (m.key === `${year}-${month}`) {
+                        m.contracts = result;
+                        m.contractsDataLoaded = true;
+                    }
+                    return m;
+                });
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+    }
+}
