@@ -54,9 +54,6 @@
 import { LightningElement, track } from 'lwc';
 import getCurrentMonthContracts from '@salesforce/apex/GetContractData.getCurrentMonthContracts';
 
-// Import custom cell component
-import customActionButton from './actionButton';
-
 export default class ContractTabs extends LightningElement {
     @track months = [];
     @track activeTab = '';
@@ -68,14 +65,10 @@ export default class ContractTabs extends LightningElement {
     columns = [
         {
             label: 'Action',
-            type: 'button-icon',
+            type: 'customActionButton', // Use the custom type
             fieldName: 'actions',
             typeAttributes: {
-                iconName: 'utility:threedots_vertical',
-                alternativeText: 'Actions',
-                name: 'actions',
-                menuAlignment: 'auto',
-                variant: 'border-filled'
+                rowId: { fieldName: 'Id' } // Assuming you have an 'Id' field in your data
             }
         },
         { label: 'Account Name', fieldName: 'AccountName', type: 'text' },
@@ -172,8 +165,10 @@ export default class ContractTabs extends LightningElement {
     }
 
     handleRowAction(event) {
-        const actionName = event.detail.action.name;
-        const row = event.detail.row;
+        const actionName = event.detail.action;
+        const rowId = event.detail.rowId;
+        const row = this.contracts.find(contract => contract.Id === rowId);
+
         switch (actionName) {
             case 'start_renewal':
                 this.startRenewal(row);
