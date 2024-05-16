@@ -1,57 +1,30 @@
-bobBrokers.html
 <template>
-    <lightning-tabset variant="scoped" active-tab-value={activeTab} onactive={handleActiveTab}>
-        <template for:each={months} for:item="month">
-            <lightning-tab key={month.key} label={month.label} value={month.key}>
-                <div class="slds-m-around_medium">
-                    <div class="slds-grid slds-gutters">
-                        <div class="slds-col slds-size_1-of-4">
-                            <lightning-input type="text" label="Search" onchange={handleSearchKeyChange} class="slds-m-bottom_small"></lightning-input>
-                        </div>
-                        <div class="slds-col slds-size_1-of-4">
-                            <lightning-combobox
-                                label="Renewal Status"
-                                value={renewalStatus}
-                                placeholder="Select Renewal Status"
-                                options={renewalStatusOptions}
-                                onchange={handleRenewalStatusChange}
-                                class="slds-m-bottom_small">
-                            </lightning-combobox>
-                        </div>
-                        <div class="slds-col slds-size_1-of-4">
-                            <lightning-combobox
-                                label="Open Enrollment Status"
-                                value={openEnrollmentStatus}
-                                placeholder="Select Open Enrollment Status"
-                                options={openEnrollmentStatusOptions}
-                                onchange={handleOpenEnrollmentStatusChange}
-                                class="slds-m-bottom_small">
-                            </lightning-combobox>
-                        </div>
-                        <div class="slds-col slds-size_1-of-4 slds-align_absolute-center">
-                            <lightning-button label="Access Shield Renewal" onclick={handleAccessShieldRenewal} class="slds-m-bottom_small"></lightning-button>
-                        </div>
-                    </div>
-                    <template if:true={contracts.length}>
-                        <lightning-datatable
-                            data={contracts}
-                            columns={columns}
-                            key-field="ContractNumber"
-                            hide-checkbox-column
-                            onrowaction={handleRowAction}>
-                        </lightning-datatable>
-                    </template>
-                    <template if:false={contracts.length}>
-                        <lightning-spinner alternative-text="Loading"></lightning-spinner>
-                    </template>
-                </div>
-            </lightning-tab>
-        </template>
-    </lightning-tabset>
+    <lightning-button-menu alternative-text="Show Menu" onselect={handleSelect}>
+        <lightning-menu-item label="Start Renewal" value="start_renewal"></lightning-menu-item>
+        <lightning-menu-item label="Start Open Enrollment" value="start_open_enrollment"></lightning-menu-item>
+        <lightning-menu-item label="Run a Quote" value="run_quote"></lightning-menu-item>
+    </lightning-button-menu>
 </template>
 
 
-bobBrokers.js
+
+import { LightningElement, api } from 'lwc';
+
+export default class ActionButton extends LightningElement {
+    @api rowId;
+
+    handleSelect(event) {
+        const selectedEvent = new CustomEvent('select', {
+            detail: {
+                action: event.detail.value,
+                rowId: this.rowId
+            }
+        });
+        this.dispatchEvent(selectedEvent);
+    }
+}
+
+
 
 import { LightningElement, track } from 'lwc';
 import getCurrentMonthContracts from '@salesforce/apex/GetContractData.getCurrentMonthContracts';
@@ -67,14 +40,10 @@ export default class ContractTabs extends LightningElement {
     columns = [
         {
             label: 'Action',
-            type: 'button-icon',
+            type: 'customActionButton', // Use the custom type
             fieldName: 'actions',
             typeAttributes: {
-                iconName: 'utility:threedots_vertical',
-                alternativeText: 'Actions',
-                name: 'actions',
-                menuAlignment: 'auto',
-                variant: 'border-filled'
+                rowId: { fieldName: 'Id' } // Assuming you have an 'Id' field in your data
             }
         },
         { label: 'Account Name', fieldName: 'AccountName', type: 'text' },
@@ -171,8 +140,10 @@ export default class ContractTabs extends LightningElement {
     }
 
     handleRowAction(event) {
-        const actionName = event.detail.action.name;
-        const row = event.detail.row;
+        const actionName = event.detail.action;
+        const rowId = event.detail.rowId;
+        const row = this.contracts.find(contract => contract.Id === rowId);
+
         switch (actionName) {
             case 'start_renewal':
                 this.startRenewal(row);
@@ -203,30 +174,58 @@ export default class ContractTabs extends LightningElement {
     }
 }
 
-actionButton.html
+
 
 <template>
-    <lightning-button-menu alternative-text="Show Menu" onselect={handleSelect}>
-        <lightning-menu-item label="Start Renewal" value="start_renewal"></lightning-menu-item>
-        <lightning-menu-item label="Start Open Enrollment" value="start_open_enrollment"></lightning-menu-item>
-        <lightning-menu-item label="Run a Quote" value="run_quote"></lightning-menu-item>
-    </lightning-button-menu>
+    <lightning-tabset variant="scoped" active-tab-value={activeTab} onactive={handleActiveTab}>
+        <template for:each={months} for:item="month">
+            <lightning-tab key={month.key} label={month.label} value={month.key}>
+                <div class="slds-m-around_medium">
+                    <div class="slds-grid slds-gutters">
+                        <div class="slds-col slds-size_1-of-4">
+                            <lightning-input type="text" label="Search" onchange={handleSearchKeyChange} class="slds-m-bottom_small"></lightning-input>
+                        </div>
+                        <div class="slds-col slds-size_1-of-4">
+                            <lightning-combobox
+                                label="Renewal Status"
+                                value={renewalStatus}
+                                placeholder="Select Renewal Status"
+                                options={renewalStatusOptions}
+                                onchange={handleRenewalStatusChange}
+                                class="slds-m-bottom_small">
+                            </lightning-combobox>
+                        </div>
+                        <div class="slds-col slds-size_1-of-4">
+                            <lightning-combobox
+                                label="Open Enrollment Status"
+                                value={openEnrollmentStatus}
+                                placeholder="Select Open Enrollment Status"
+                                options={openEnrollmentStatusOptions}
+                                onchange={handleOpenEnrollmentStatusChange}
+                                class="slds-m-bottom_small">
+                            </lightning-combobox>
+                        </div>
+                        <div class="slds-col slds-size_1-of-4 slds-align_absolute-center">
+                            <lightning-button label="Access Shield Renewal" onclick={handleAccessShieldRenewal} class="slds-m-bottom_small"></lightning-button>
+                        </div>
+                    </div>
+                    <template if:true={contracts.length}>
+                        <lightning-datatable
+                            data={contracts}
+                            columns={columns}
+                            key-field="ContractNumber"
+                            hide-checkbox-column
+                            onrowaction={handleRowAction}
+                            onsave={handleSave}
+                            onsuccess={handleSuccess}
+                            onrowaction={handleRowAction}>
+                        </lightning-datatable>
+                    </template>
+                    <template if:false={contracts.length}>
+                        <lightning-spinner alternative-text="Loading"></lightning-spinner>
+                    </template>
+                </div>
+            </lightning-tab>
+        </template>
+    </lightning-tabset>
 </template>
-
-actionButton.js
-
-import { LightningElement, api } from 'lwc';
-
-export default class ActionButton extends LightningElement {
-    @api rowId;
-
-    handleSelect(event) {
-        const selectedEvent = new CustomEvent('select', {
-            detail: {
-                action: event.detail.value,
-                rowId: this.rowId
-            }
-        });
-        this.dispatchEvent(selectedEvent);
-    }
-}
