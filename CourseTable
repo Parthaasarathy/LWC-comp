@@ -1,31 +1,16 @@
 public with sharing class CourseController {
     @AuraEnabled(cacheable=true)
-    public static List<CourseWrapper> getCoursesByInstructor(Id instructorId) {
-        List<Course__c> courses = [SELECT Id, Name, Date__c, Number_of_Students__c FROM Course__c WHERE Instructor__c = :instructorId];
-        List<CourseWrapper> courseWrappers = new List<CourseWrapper>();
-        for (Course__c course : courses) {
-            courseWrappers.add(new CourseWrapper(course));
-        }
-        return courseWrappers;
+    public static List<Course__c> getCoursesByInstructor(Id instructorId) {
+        return [
+            SELECT Id, Name, Date__c, Number_of_Enrolled_Students__c 
+            FROM Course__c 
+            WHERE Instructor__c = :instructorId
+        ];
     }
 
     @AuraEnabled(cacheable=true)
     public static List<Instructor__c> getInstructors() {
         return [SELECT Id, Name FROM Instructor__c];
-    }
-
-    public class CourseWrapper {
-        @AuraEnabled public String Id;
-        @AuraEnabled public String Name;
-        @AuraEnabled public Date Date__c;
-        @AuraEnabled public Integer Number_of_Students__c;
-
-        public CourseWrapper(Course__c course) {
-            this.Id = course.Id;
-            this.Name = course.Name;
-            this.Date__c = course.Date__c;
-            this.Number_of_Students__c = course.Number_of_Students__c;
-        }
     }
 }
 
