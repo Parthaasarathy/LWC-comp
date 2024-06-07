@@ -1,40 +1,3 @@
-public with sharing class CourseController {
-    @AuraEnabled
-    public static Id createCourse(String name, String duration, Integer numberOfSeats, Date date, Id instructorId) {
-        Course__c newCourse = new Course__c();
-        newCourse.Name = name;
-        newCourse.Duration__c = duration;
-        newCourse.Number_Of_Seats__c = numberOfSeats;
-        newCourse.Date__c = date;
-        newCourse.Instructor__c = instructorId;
-        insert newCourse;
-        return newCourse.Id;
-    }
-    
-    @AuraEnabled(cacheable=true)
-    public static List<Instructor__c> getInstructors() {
-        return [SELECT Id, Name FROM Instructor__c];
-    }
-}
-
-
-
-<template>
-    <lightning-card title="Create Course">
-        <div class="slds-p-around_medium">
-            <lightning-input label="Course Name" value={courseName} onchange={handleInputChange} data-id="Name"></lightning-input>
-            <lightning-input label="Duration" value={duration} onchange={handleInputChange} data-id="Duration__c"></lightning-input>
-            <lightning-input label="Number of Seats" type="number" value={numberOfSeats} onchange={handleInputChange} data-id="Number_Of_Seats__c"></lightning-input>
-            <lightning-input type="date" label="Date" value={date} onchange={handleInputChange} data-id="Date__c"></lightning-input>
-            <lightning-combobox label="Instructor" value={selectedInstructor} placeholder="Select an Instructor"
-                options={instructorOptions} onchange={handleInputChange} data-id="Instructor__c"></lightning-combobox>
-            <lightning-button variant="brand" label="Create Course" onclick={handleCreateCourse}></lightning-button>
-        </div>
-    </lightning-card>
-</template>
-
-
-
 import { LightningElement, track, wire } from 'lwc';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import createCourse from '@salesforce/apex/CourseController.createCourse';
@@ -44,7 +7,7 @@ export default class CreateCourse extends LightningElement {
     @track courseName = '';
     @track duration = '';
     @track numberOfSeats = '';
-    @track date = '';
+    @track courseDate = ''; // updated variable name
     @track selectedInstructor = '';
     @track instructorOptions = [];
 
@@ -74,7 +37,7 @@ export default class CreateCourse extends LightningElement {
         } else if (field === 'Number_Of_Seats__c') {
             this.numberOfSeats = event.target.value;
         } else if (field === 'Date__c') {
-            this.date = event.target.value;
+            this.courseDate = event.target.value; // updated variable name
         } else if (field === 'Instructor__c') {
             this.selectedInstructor = event.target.value;
         }
@@ -85,7 +48,7 @@ export default class CreateCourse extends LightningElement {
             name: this.courseName, 
             duration: this.duration, 
             numberOfSeats: this.numberOfSeats, 
-            date: this.date, 
+            courseDate: this.courseDate, // updated variable name
             instructorId: this.selectedInstructor 
         })
             .then(courseId => {
@@ -100,7 +63,7 @@ export default class CreateCourse extends LightningElement {
                 this.courseName = '';
                 this.duration = '';
                 this.numberOfSeats = '';
-                this.date = '';
+                this.courseDate = ''; // updated variable name
                 this.selectedInstructor = '';
             })
             .catch(error => {
