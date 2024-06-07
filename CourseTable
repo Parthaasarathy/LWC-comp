@@ -40,7 +40,7 @@ export default class CourseTable extends LightningElement {
     @track columns = [
         { label: 'Course Name', fieldName: 'Name' },
         { label: 'Date', fieldName: 'Date__c', type: 'date' },
-        { label: 'Number of Enrolled Students', fieldName: 'Number_of_Students__c', type: 'number' }
+        { label: 'Number of Enrolled Students', fieldName: 'Number_of_Enrolled_Students__c', type: 'number' }
     ];
 
     @wire(getInstructors)
