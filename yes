@@ -1,151 +1,116 @@
-import { LightningElement, track } from 'lwc';
-import getCurrentMonthContracts from '@salesforce/apex/GetContractData.getCurrentMonthContracts';
-
-export default class ContractTabs extends LightningElement {
-    @track months = [];
-    @track activeTab = '';
-    @track contracts = [];
-    @track searchKey = '';
-    @track renewalStatus = 'None';
-    @track openEnrollmentStatus = 'None';
-
-    columns = [
-        {
-            label: 'Action',
-            type: 'button-icon',
-            fieldName: 'actions',
-            typeAttributes: {
-                iconName: 'utility:threedots_vertical',
-                alternativeText: 'Actions',
-                name: 'actions',
-                menuAlignment: 'auto',
-                variant: 'border-filled'
-            }
-        },
-        { label: 'Account Name', fieldName: 'AccountName', type: 'text' },
-        { label: 'Group ID', fieldName: 'Group_ID__c', type: 'text' },
-        { label: 'Renewal Date', fieldName: 'Renewal_Date__c', type: 'date' },
-        { label: 'No of Employees', fieldName: 'No_of_Employees__c', type: 'number' },
-        { label: 'No of Active Members', fieldName: 'No_of_Active_Members__c', type: 'number' },
-        { label: 'Current Premium', fieldName: 'Current_Premium__c', type: 'currency' },
-        { label: 'Renewal Premium', fieldName: 'Renewal_Premium__c', type: 'currency' },
-        { label: '% Change', fieldName: 'Change__c', type: 'currency' },
-        { label: 'Renewal Status', fieldName: 'Renewal_Status__c', type: 'text' },
-        { label: 'Open Enrollment Status', fieldName: 'Open_Enrollment_Status__c', type: 'text' },
-        { label: 'Renewal Iterations', fieldName: 'Renewal_Iterations__c', type: 'number' }
-    ];
-
-    connectedCallback() {
-        this.initializeMonths();
+public with sharing class CourseController {
+    @AuraEnabled
+    public static Id createCourse(String name, String duration, Integer numberOfSeats, Date date, Id instructorId) {
+        Course__c newCourse = new Course__c();
+        newCourse.Name = name;
+        newCourse.Duration__c = duration;
+        newCourse.Number_Of_Seats__c = numberOfSeats;
+        newCourse.Date__c = date;
+        newCourse.Instructor__c = instructorId;
+        insert newCourse;
+        return newCourse.Id;
     }
+    
+    @AuraEnabled(cacheable=true)
+    public static List<Instructor__c> getInstructors() {
+        return [SELECT Id, Name FROM Instructor__c];
+    }
+}
 
-    initializeMonths() {
-        const today = new Date();
-        for (let i = -3; i <= 8; i++) {
-            let date = new Date(today.getFullYear(), today.getMonth() + i, 1);
-            this.months.push({
-                label: `${date.toLocaleString('default', { month: 'long' })} ${date.getFullYear()}`,
-                key: `${date.getFullYear()}-${date.getMonth() + 1}`
+
+
+<template>
+    <lightning-card title="Create Course">
+        <div class="slds-p-around_medium">
+            <lightning-input label="Course Name" value={courseName} onchange={handleInputChange} data-id="Name"></lightning-input>
+            <lightning-input label="Duration" value={duration} onchange={handleInputChange} data-id="Duration__c"></lightning-input>
+            <lightning-input label="Number of Seats" type="number" value={numberOfSeats} onchange={handleInputChange} data-id="Number_Of_Seats__c"></lightning-input>
+            <lightning-input type="date" label="Date" value={date} onchange={handleInputChange} data-id="Date__c"></lightning-input>
+            <lightning-combobox label="Instructor" value={selectedInstructor} placeholder="Select an Instructor"
+                options={instructorOptions} onchange={handleInputChange} data-id="Instructor__c"></lightning-combobox>
+            <lightning-button variant="brand" label="Create Course" onclick={handleCreateCourse}></lightning-button>
+        </div>
+    </lightning-card>
+</template>
+
+
+
+import { LightningElement, track, wire } from 'lwc';
+import { ShowToastEvent } from 'lightning/platformShowToastEvent';
+import createCourse from '@salesforce/apex/CourseController.createCourse';
+import getInstructors from '@salesforce/apex/CourseController.getInstructors';
+
+export default class CreateCourse extends LightningElement {
+    @track courseName = '';
+    @track duration = '';
+    @track numberOfSeats = '';
+    @track date = '';
+    @track selectedInstructor = '';
+    @track instructorOptions = [];
+
+    @wire(getInstructors)
+    wiredInstructors({ error, data }) {
+        if (data) {
+            this.instructorOptions = data.map(instructor => {
+                return { label: instructor.Name, value: instructor.Id };
             });
+        } else if (error) {
+            this.dispatchEvent(
+                new ShowToastEvent({
+                    title: 'Error loading instructors',
+                    message: error.body.message,
+                    variant: 'error',
+                }),
+            );
         }
-        this.activeTab = this.months[3].key; // Set current month as the active tab
-        this.loadContracts(this.activeTab);
     }
 
-    handleActiveTab(event) {
-        const tabValue = event.detail.value;
-        this.activeTab = tabValue;
-        this.loadContracts(tabValue);
-    }
-
-    handleSearchKeyChange(event) {
-        this.searchKey = event.target.value;
-    }
-
-    handleRenewalStatusChange(event) {
-        this.renewalStatus = event.target.value;
-    }
-
-    handleOpenEnrollmentStatusChange(event) {
-        this.openEnrollmentStatus = event.target.value;
-    }
-
-    handleAccessShieldRenewal() {
-        this.loadContracts(this.activeTab);
-    }
-
-    loadContracts(tabValue) {
-        if (!tabValue) {
-            return;
+    handleInputChange(event) {
+        const field = event.target.dataset.id;
+        if (field === 'Name') {
+            this.courseName = event.target.value;
+        } else if (field === 'Duration__c') {
+            this.duration = event.target.value;
+        } else if (field === 'Number_Of_Seats__c') {
+            this.numberOfSeats = event.target.value;
+        } else if (field === 'Date__c') {
+            this.date = event.target.value;
+        } else if (field === 'Instructor__c') {
+            this.selectedInstructor = event.target.value;
         }
-        const [year, month] = tabValue.split('-').map(Number);
-        getCurrentMonthContracts({ 
-            month, 
-            year, 
-            searchKey: this.searchKey, 
-            renewalStatus: this.renewalStatus, 
-            openEnrollmentStatus: this.openEnrollmentStatus 
+    }
+
+    handleCreateCourse() {
+        createCourse({ 
+            name: this.courseName, 
+            duration: this.duration, 
+            numberOfSeats: this.numberOfSeats, 
+            date: this.date, 
+            instructorId: this.selectedInstructor 
         })
-        .then(result => {
-            this.contracts = result.map(contract => ({
-                ...contract,
-                AccountName: contract.Account.Name
-            }));
-        })
-        .catch(error => {
-            console.error('Error:', error);
-        });
-    }
-
-    get renewalStatusOptions() {
-        return [
-            { label: 'None', value: 'None' },
-            { label: 'Not Started', value: 'Not Started' },
-            { label: 'In Progress', value: 'In Progress' },
-            { label: 'Completed', value: 'Completed' }
-        ];
-    }
-
-    get openEnrollmentStatusOptions() {
-        return [
-            { label: 'None', value: 'None' },
-            { label: 'Not Started', value: 'Not Started' },
-            { label: 'In Progress', value: 'In Progress' },
-            { label: 'Completed', value: 'Completed' }
-        ];
-    }
-
-    handleRowAction(event) {
-        const actionName = event.detail.action;
-        const rowId = event.detail.rowId;
-        const row = this.contracts.find(contract => contract.Id === rowId);
-
-        switch (actionName) {
-            case 'start_renewal':
-                this.startRenewal(row);
-                break;
-            case 'start_open_enrollment':
-                this.startOpenEnrollment(row);
-                break;
-            case 'run_quote':
-                this.runQuote(row);
-                break;
-            default:
-        }
-    }
-
-    startRenewal(row) {
-        console.log('Start Renewal for ', row);
-        // Add your logic here
-    }
-
-    startOpenEnrollment(row) {
-        console.log('Start Open Enrollment for ', row);
-        // Add your logic here
-    }
-
-    runQuote(row) {
-        console.log('Run Quote for ', row);
-        // Add your logic here
+            .then(courseId => {
+                this.dispatchEvent(
+                    new ShowToastEvent({
+                        title: 'Success',
+                        message: 'Course created with Id: ' + courseId,
+                        variant: 'success',
+                    }),
+                );
+                // Reset form
+                this.courseName = '';
+                this.duration = '';
+                this.numberOfSeats = '';
+                this.date = '';
+                this.selectedInstructor = '';
+            })
+            .catch(error => {
+                this.dispatchEvent(
+                    new ShowToastEvent({
+                        title: 'Error creating record',
+                        message: error.body.message,
+                        variant: 'error',
+                    }),
+                );
+            });
     }
 }
