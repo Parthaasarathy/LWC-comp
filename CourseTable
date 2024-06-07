@@ -1,0 +1,97 @@
+public with sharing class CourseController {
+    @AuraEnabled(cacheable=true)
+    public static List<CourseWrapper> getCoursesByInstructor(Id instructorId) {
+        List<Course__c> courses = [SELECT Id, Name, Date__c, Number_of_Students__c FROM Course__c WHERE Instructor__c = :instructorId];
+        List<CourseWrapper> courseWrappers = new List<CourseWrapper>();
+        for (Course__c course : courses) {
+            courseWrappers.add(new CourseWrapper(course));
+        }
+        return courseWrappers;
+    }
+
+    @AuraEnabled(cacheable=true)
+    public static List<Instructor__c> getInstructors() {
+        return [SELECT Id, Name FROM Instructor__c];
+    }
+
+    public class CourseWrapper {
+        @AuraEnabled public String Id;
+        @AuraEnabled public String Name;
+        @AuraEnabled public Date Date__c;
+        @AuraEnabled public Integer Number_of_Students__c;
+
+        public CourseWrapper(Course__c course) {
+            this.Id = course.Id;
+            this.Name = course.Name;
+            this.Date__c = course.Date__c;
+            this.Number_of_Students__c = course.Number_of_Students__c;
+        }
+    }
+}
+
+
+<template>
+    <lightning-card title="Course List">
+        <div class="slds-p-around_medium">
+            <lightning-combobox label="Instructor" value={selectedInstructor} placeholder="Select an Instructor"
+                options={instructorOptions} onchange={handleInstructorChange}></lightning-combobox>
+            <lightning-button variant="brand" label="Filter" onclick={handleFilter}></lightning-button>
+        </div>
+        <lightning-datatable key-field="Id" data={courses} columns={columns}>
+        </lightning-datatable>
+    </lightning-card>
+</template>
+
+
+import { LightningElement, track, wire } from 'lwc';
+import { ShowToastEvent } from 'lightning/platformShowToastEvent';
+import getCoursesByInstructor from '@salesforce/apex/CourseController.getCoursesByInstructor';
+import getInstructors from '@salesforce/apex/CourseController.getInstructors';
+
+export default class CourseTable extends LightningElement {
+    @track selectedInstructor = '';
+    @track instructorOptions = [];
+    @track courses = [];
+    @track columns = [
+        { label: 'Course Name', fieldName: 'Name' },
+        { label: 'Date', fieldName: 'Date__c', type: 'date' },
+        { label: 'Number of Enrolled Students', fieldName: 'Number_of_Students__c', type: 'number' }
+    ];
+
+    @wire(getInstructors)
+    wiredInstructors({ error, data }) {
+        if (data) {
+            this.instructorOptions = data.map(instructor => {
+                return { label: instructor.Name, value: instructor.Id };
+            });
+        } else if (error) {
+            this.dispatchEvent(
+                new ShowToastEvent({
+                    title: 'Error loading instructors',
+                    message: error.body.message,
+                    variant: 'error',
+                }),
+            );
+        }
+    }
+
+    handleInstructorChange(event) {
+        this.selectedInstructor = event.target.value;
+    }
+
+    handleFilter() {
+        getCoursesByInstructor({ instructorId: this.selectedInstructor })
+            .then(result => {
+                this.courses = result;
+            })
+            .catch(error => {
+                this.dispatchEvent(
+                    new ShowToastEvent({
+                        title: 'Error loading courses',
+                        message: error.body.message,
+                        variant: 'error',
+                    }),
+                );
+            });
+    }
+}
