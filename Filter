@@ -1,165 +1,201 @@
 import { LightningElement, track } from 'lwc';
-import getCurrentMonthContracts from '@salesforce/apex/GetContractData.getCurrentMonthContracts';
+import { ShowToastEvent } from 'lightning/platformShowToastEvent';
+import searchCourses from '@salesforce/apex/StudentCourseController.searchCourses';
+import getInstructorById from '@salesforce/apex/StudentCourseController.getInstructorById';
+import getCourseById from '@salesforce/apex/StudentCourseController.getCourseById';
+import enrollStudent from '@salesforce/apex/StudentCourseController.enrollStudent';
 
-export default class ContractTabs extends LightningElement {
-    @track months = [];
-    @track activeTab = '';
-    @track contracts = [];
-    @track searchKey = '';
-    @track renewalStatus = 'None';
-    @track openEnrollmentStatus = 'None';
-
-    columns = [
-        { label: 'Account Name', fieldName: 'AccountName', type: 'text' },
-        { label: 'Group ID', fieldName: 'Group_ID__c', type: 'text' },
-        { label: 'Renewal Date', fieldName: 'Renewal_Date__c', type: 'date' },
-        { label: 'No of Employees', fieldName: 'No_of_Employees__c', type: 'number' },
-        { label: 'No of Active Members', fieldName: 'No_of_Active_Members__c', type: 'number' },
-        { label: 'Current Premium', fieldName: 'Current_Premium__c', type: 'currency' },
-        { label: 'Renewal Premium', fieldName: 'Renewal_Premium__c', type: 'currency' },
-        { label: 'Renewal Status', fieldName: 'Renewal_Status__c', type: 'text' },
-        { label: 'Open Enrollment Status', fieldName: 'Open_Enrollment_Status__c', type: 'text' },
-        { label: 'Renewal Iterations', fieldName: 'Renewal_Iterations__c', type: 'number' }
+export default class StudentCourseSearch extends LightningElement {
+    @track searchTerm = '';
+    @track courses = [];
+    @track columns = [
+        { label: 'Course Name', fieldName: 'Name', type: 'button', typeAttributes: { label: { fieldName: 'Name' }, name: 'view_course', variant: 'base' } },
+        { label: 'Instructor Name', fieldName: 'InstructorName', type: 'button', typeAttributes: { label: { fieldName: 'InstructorName' }, name: 'view_instructor', variant: 'base' } },
+        { label: 'Available Seats', fieldName: 'AvailableSeats', type: 'number' }
     ];
 
-    connectedCallback() {
-        this.initializeMonths();
+    @track instructor = {};
+    @track course = {};
+    @track studentName = '';
+    @track studentEmail = '';
+    @track isInstructorModalOpen = false;
+    @track isCourseModalOpen = false;
+    @track isEnrollModalOpen = false;
+
+    handleInputChange(event) {
+        this.searchTerm = event.target.value;
     }
 
-    initializeMonths() {
-        const today = new Date();
-        for (let i = -3; i <= 8; i++) {
-            let date = new Date(today.getFullYear(), today.getMonth() + i, 1);
-            this.months.push({
-                label: `${date.toLocaleString('default', { month: 'long' })} ${date.getFullYear()}`,
-                key: `${date.getFullYear()}-${date.getMonth() + 1}`
+    handleSearch() {
+        searchCourses({ searchTerm: this.searchTerm })
+            .then(result => {
+                this.courses = result;
+            })
+            .catch(error => {
+                this.dispatchEvent(
+                    new ShowToastEvent({
+                        title: 'Error loading courses',
+                        message: error.body.message,
+                        variant: 'error',
+                    }),
+                );
             });
+    }
+
+    handleRowAction(event) {
+        const actionName = event.detail.action.name;
+        const row = event.detail.row;
+        if (actionName === 'view_course') {
+            this.openCourseModal(row.Id);
+        } else if (actionName === 'view_instructor') {
+            this.openInstructorModal(row.InstructorId);
         }
-        this.activeTab = this.months[3].key; // Set current month as the active tab
-        this.loadContracts(this.activeTab);
     }
 
-    handleActiveTab(event) {
-        const tabValue = event.detail.value;
-        this.activeTab = tabValue;
-        this.loadContracts(tabValue);
+    openInstructorModal(instructorId) {
+        getInstructorById({ instructorId })
+            .then(result => {
+                this.instructor = result;
+                this.isInstructorModalOpen = true;
+            })
+            .catch(error => {
+                this.dispatchEvent(
+                    new ShowToastEvent({
+                        title: 'Error loading instructor',
+                        message: error.body.message,
+                        variant: 'error',
+                    }),
+                );
+            });
     }
 
-    handleSearchKeyChange(event) {
-        this.searchKey = event.target.value;
+    closeInstructorModal() {
+        this.isInstructorModalOpen = false;
     }
 
-    handleRenewalStatusChange(event) {
-        this.renewalStatus = event.target.value;
+    openCourseModal(courseId) {
+        getCourseById({ courseId })
+            .then(result => {
+                this.course = result;
+                this.isCourseModalOpen = true;
+            })
+            .catch(error => {
+                this.dispatchEvent(
+                    new ShowToastEvent({
+                        title: 'Error loading course',
+                        message: error.body.message,
+                        variant: 'error',
+                    }),
+                );
+            });
     }
 
-    handleOpenEnrollmentStatusChange(event) {
-        this.openEnrollmentStatus = event.target.value;
+    closeCourseModal() {
+        this.isCourseModalOpen = false;
     }
 
-    handleAccessShieldRenewal() {
-        this.loadContracts(this.activeTab);
+    openEnrollModal() {
+        this.isEnrollModalOpen = true;
     }
 
-    loadContracts(tabValue) {
-        if (!tabValue) {
-            return;
-        }
-        const [year, month] = tabValue.split('-').map(Number);
-        getCurrentMonthContracts({ 
-            month, 
-            year, 
-            searchKey: this.searchKey, 
-            renewalStatus: this.renewalStatus, 
-            openEnrollmentStatus: this.openEnrollmentStatus 
+    closeEnrollModal() {
+        this.isEnrollModalOpen = false;
+    }
+
+    handleStudentNameChange(event) {
+        this.studentName = event.target.value;
+    }
+
+    handleStudentEmailChange(event) {
+        this.studentEmail = event.target.value;
+    }
+
+    handleEnroll() {
+        enrollStudent({
+            studentName: this.studentName,
+            studentEmail: this.studentEmail,
+            courseId: this.course.Id
         })
-        .then(result => {
-            this.contracts = result.map(contract => ({
-                ...contract,
-                AccountName: contract.Account.Name
-            }));
-        })
-        .catch(error => {
-            console.error('Error:', error);
-        });
-    }
-
-    get renewalStatusOptions() {
-        return [
-            { label: 'None', value: 'None' },
-            { label: 'Not Started', value: 'Not Started' },
-            { label: 'In Progress', value: 'In Progress' },
-            { label: 'Completed', value: 'Completed' }
-        ];
-    }
-
-    get openEnrollmentStatusOptions() {
-        return [
-            { label: 'None', value: 'None' },
-            { label: 'Not Started', value: 'Not Started' },
-            { label: 'In Progress', value: 'In Progress' },
-            { label: 'Completed', value: 'Completed' }
-        ];
+            .then(() => {
+                this.dispatchEvent(
+                    new ShowToastEvent({
+                        title: 'Success',
+                        message: 'Student enrolled successfully',
+                        variant: 'success',
+                    }),
+                );
+                this.closeEnrollModal();
+                this.closeCourseModal();
+            })
+            .catch(error => {
+                this.dispatchEvent(
+                    new ShowToastEvent({
+                        title: 'Error enrolling student',
+                        message: error.body.message,
+                        variant: 'error',
+                    }),
+                );
+            });
     }
 }
 
 
-/* contractTabs.css */
-.slds-align_absolute-center {
-    display: flex;
-    align-items: center;
-    justify-content: center;
+
+public with sharing class StudentCourseController {
+    @AuraEnabled(cacheable=true)
+    public static List<CourseWrapper> searchCourses(String searchTerm) {
+        String searchPattern = '%' + searchTerm + '%';
+        List<Course__c> courses = [
+            SELECT Id, Name, Number_Of_Seats__c, Number_of_Enrolled_Students__c, Instructor__r.Name, Instructor__c
+            FROM Course__c
+            WHERE Name LIKE :searchPattern
+        ];
+        
+        List<CourseWrapper> courseWrappers = new List<CourseWrapper>();
+        for (Course__c course : courses) {
+            Integer availableSeats = Integer.valueOf(course.Number_Of_Seats__c) - Integer.valueOf(course.Number_of_Enrolled_Students__c != null ? course.Number_of_Enrolled_Students__c : 0);
+            courseWrappers.add(new CourseWrapper(course, availableSeats));
+        }
+        
+        return courseWrappers;
+    }
+
+    @AuraEnabled(cacheable=true)
+    public static Instructor__c getInstructorById(Id instructorId) {
+        List<Instructor__c> instructors = [SELECT Id, Name, Email__c FROM Instructor__c WHERE Id = :instructorId];
+        if (instructors.isEmpty()) {
+            return null;
+        }
+        return instructors[0];
+    }
+
+    @AuraEnabled(cacheable=true)
+    public static Course__c getCourseById(Id courseId) {
+        return [SELECT Id, Name, Duration__c, Date__c, Number_Of_Seats__c, Number_of_Enrolled_Students__c FROM Course__c WHERE Id = :courseId];
+    }
+
+    @AuraEnabled
+    public static void enrollStudent(String studentName, String studentEmail, Id courseId) {
+        Student__c newStudent = new Student__c();
+        newStudent.Name = studentName;
+        newStudent.Email__c = studentEmail;
+        newStudent.Course__c = courseId;
+        insert newStudent;
+    }
+
+    public class CourseWrapper {
+        @AuraEnabled public String Id;
+        @AuraEnabled public String Name;
+        @AuraEnabled public String InstructorName;
+        @AuraEnabled public Integer AvailableSeats;
+        @AuraEnabled public String InstructorId;
+
+        public CourseWrapper(Course__c course, Integer availableSeats) {
+            this.Id = course.Id;
+            this.Name = course.Name;
+            this.InstructorName = course.Instructor__r.Name;
+            this.InstructorId = course.Instructor__c;
+            this.AvailableSeats = availableSeats;
+        }
+    }
 }
-
-
-<template>
-    <lightning-tabset variant="scoped" active-tab-value={activeTab} onactive={handleActiveTab}>
-        <template for:each={months} for:item="month">
-            <lightning-tab key={month.key} label={month.label} value={month.key}>
-                <div class="slds-m-around_medium">
-                    <div class="slds-grid slds-gutters">
-                        <div class="slds-col slds-size_1-of-4">
-                            <lightning-input type="text" label="Search" onchange={handleSearchKeyChange} class="slds-m-bottom_small"></lightning-input>
-                        </div>
-                        <div class="slds-col slds-size_1-of-4">
-                            <lightning-combobox
-                                label="Renewal Status"
-                                value={renewalStatus}
-                                placeholder="Select Renewal Status"
-                                options={renewalStatusOptions}
-                                onchange={handleRenewalStatusChange}
-                                class="slds-m-bottom_small">
-                            </lightning-combobox>
-                        </div>
-                        <div class="slds-col slds-size_1-of-4">
-                            <lightning-combobox
-                                label="Open Enrollment Status"
-                                value={openEnrollmentStatus}
-                                placeholder="Select Open Enrollment Status"
-                                options={openEnrollmentStatusOptions}
-                                onchange={handleOpenEnrollmentStatusChange}
-                                class="slds-m-bottom_small">
-                            </lightning-combobox>
-                        </div>
-                        <div class="slds-col slds-size_1-of-4 slds-align_absolute-center">
-                            <lightning-button label="Access Shield Renewal" onclick={handleAccessShieldRenewal} class="slds-m-bottom_small"></lightning-button>
-                        </div>
-                    </div>
-                    <template if:true={contracts.length}>
-                        <lightning-datatable
-                            data={contracts}
-                            columns={columns}
-                            key-field="ContractNumber"
-                            hide-checkbox-column
-                            show-row-number-column>
-                        </lightning-datatable>
-                    </template>
-                    <template if:false={contracts.length}>
-                        <lightning-spinner alternative-text="Loading"></lightning-spinner>
-                    </template>
-                </div>
-            </lightning-tab>
-        </template>
-    </lightning-tabset>
-</template>
-
