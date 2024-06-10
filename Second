@@ -1,92 +1,286 @@
-public with sharing class GetContractData {
+public with sharing class StudentCourseController {
     @AuraEnabled(cacheable=true)
-    public static List<Contract> getCurrentMonthContracts(Integer month, Integer year) {
-        Date startDate = Date.newInstance(year, month, 1);
-        Date endDate = startDate.addMonths(1).addDays(-1);
-
-        return [
-            SELECT ContractNumber, Change__c, Account.Name, AccountId, Current_Premium__c, Group_ID__c, No_of_Active_Members__c,
-                   No_of_Employees__c, Open_Enrollment_Status__c, Renewal_Date__c, Renewal_Iterations__c, Renewal_Premium__c,
-                   Renewal_Status__c
-            FROM Contract
-            WHERE Renewal_Date__c >= :startDate AND Renewal_Date__c <= :endDate
+    public static List<CourseWrapper> searchCourses(String searchTerm) {
+        String searchPattern = '%' + searchTerm + '%';
+        List<Course__c> courses = [
+            SELECT Id, Name, Number_Of_Seats__c, Number_of_Enrolled_Students__c, Instructor__r.Name
+            FROM Course__c
+            WHERE Name LIKE :searchPattern
         ];
-    }
-}
-
-import { LightningElement, track } from 'lwc';
-import getCurrentMonthContracts from '@salesforce/apex/GetContractData.getCurrentMonthContracts';
-
-export default class ContractTabs extends LightningElement {
-    @track months = [];
-    @track activeTab = '';
-    @track contracts = [];
-    columns = [
-        { label: 'Account Name', fieldName: 'AccountName', type: 'text' },
-        { label: 'Group ID', fieldName: 'Group_ID__c', type: 'text' },
-        { label: 'Renewal Date', fieldName: 'Renewal_Date__c', type: 'date' },
-        { label: 'No of Employees', fieldName: 'No_of_Employees__c', type: 'number' },
-        { label: 'No of Active Members', fieldName: 'No_of_Active_Members__c', type: 'number' },
-        { label: 'Current Premium', fieldName: 'Current_Premium__c', type: 'currency' },
-        { label: 'Renewal Premium', fieldName: 'Renewal_Premium__c', type: 'currency' },
-        { label: 'Renewal Status', fieldName: 'Renewal_Status__c', type: 'text' },
-        { label: 'Open Enrollment Status', fieldName: 'Open_Enrollment_Status__c', type: 'text' },
-        { label: 'Renewal Iterations', fieldName: 'Renewal_Iterations__c', type: 'number' }
-    ];
-
-    connectedCallback() {
-        this.initializeMonths();
-    }
-
-    initializeMonths() {
-        const today = new Date();
-        for (let i = -3; i <= 8; i++) {
-            let date = new Date(today.getFullYear(), today.getMonth() + i, 1);
-            this.months.push({
-                label: `${date.toLocaleString('default', { month: 'long' })} ${date.getFullYear()}`,
-                key: `${date.getFullYear()}-${date.getMonth() + 1}`
-            });
+        
+        List<CourseWrapper> courseWrappers = new List<CourseWrapper>();
+        for (Course__c course : courses) {
+            Integer availableSeats = Integer.valueOf(course.Number_Of_Seats__c) - Integer.valueOf(course.Number_of_Enrolled_Students__c != null ? course.Number_of_Enrolled_Students__c : 0);
+            courseWrappers.add(new CourseWrapper(course, availableSeats));
         }
-        this.activeTab = this.months[3].key; // Set current month as the active tab
-        this.loadContracts(this.activeTab);
+        
+        return courseWrappers;
     }
 
-    handleActiveTab(event) {
-        const tabValue = event.detail.value;
-        this.activeTab = tabValue;
-        this.loadContracts(tabValue);
+    @AuraEnabled(cacheable=true)
+    public static Instructor__c getInstructorById(Id instructorId) {
+        return [SELECT Id, Name, Email__c FROM Instructor__c WHERE Id = :instructorId];
     }
 
-    loadContracts(tabValue) {
-        const [year, month] = tabValue.split('-').map(Number);
-        getCurrentMonthContracts({ month, year })
-            .then(result => {
-                this.contracts = result.map(contract => ({
-                    ...contract,
-                    AccountName: contract.Account.Name
-                }));
-            })
-            .catch(error => {
-                console.error('Error:', error);
-            });
+    @AuraEnabled(cacheable=true)
+    public static Course__c getCourseById(Id courseId) {
+        return [SELECT Id, Name, Duration__c, Date__c, Number_Of_Seats__c, Number_of_Enrolled_Students__c FROM Course__c WHERE Id = :courseId];
+    }
+
+    @AuraEnabled
+    public static void enrollStudent(String studentName, String studentEmail, Id courseId) {
+        Student__c newStudent = new Student__c();
+        newStudent.Name = studentName;
+        newStudent.Email__c = studentEmail;
+        newStudent.Course__c = courseId;
+        insert newStudent;
+    }
+
+    public class CourseWrapper {
+        @AuraEnabled public String Id;
+        @AuraEnabled public String Name;
+        @AuraEnabled public String InstructorName;
+        @AuraEnabled public Integer AvailableSeats;
+
+        public CourseWrapper(Course__c course, Integer availableSeats) {
+            this.Id = course.Id;
+            this.Name = course.Name;
+            this.InstructorName = course.Instructor__r.Name;
+            this.AvailableSeats = availableSeats;
+        }
     }
 }
+
+
 
 <template>
-    <lightning-tabset variant="scoped" active-tab-value={activeTab} onactive={handleActiveTab}>
-        <template for:each={months} for:item="month">
-            <lightning-tab key={month.key} label={month.label} value={month.key}>
-                <lightning-datatable
-                    data={contracts}
-                    columns={columns}
-                    key-field="ContractNumber"
-                    hide-checkbox-column
-                    show-row-number-column>
-                </lightning-datatable>
-                <template if:false={contracts.length}>
-                    <lightning-spinner alternative-text="Loading"></lightning-spinner>
-                </template>
-            </lightning-tab>
+    <lightning-card title="Course Search">
+        <div class="slds-p-around_medium">
+            <lightning-input label="Search Courses" value={searchTerm} onchange={handleInputChange} placeholder="Enter course name"></lightning-input>
+            <lightning-button variant="brand" label="Search" onclick={handleSearch}></lightning-button>
+        </div>
+        <template if:true={courses}>
+            <lightning-datatable key-field="Id" data={courses} columns={columns}
+                                 onrowaction={handleRowAction}>
+            </lightning-datatable>
         </template>
-    </lightning-tabset>
+    </lightning-card>
+
+    <!-- Instructor Modal -->
+    <template if:true={isInstructorModalOpen}>
+        <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open">
+            <div class="slds-modal__container">
+                <header class="slds-modal__header">
+                    <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse"
+                            title="Close" onclick={closeInstructorModal}>
+                        <lightning-icon icon-name="utility:close" alternative-text="close" size="small"></lightning-icon>
+                        <span class="slds-assistive-text">Close</span>
+                    </button>
+                    <h2 class="slds-text-heading_medium">Instructor Details</h2>
+                </header>
+                <div class="slds-modal__content slds-p-around_medium">
+                    <p><strong>Name:</strong> {instructor.Name}</p>
+                    <p><strong>Email:</strong> {instructor.Email__c}</p>
+                </div>
+                <footer class="slds-modal__footer">
+                    <lightning-button variant="neutral" label="Close" onclick={closeInstructorModal}></lightning-button>
+                </footer>
+            </div>
+        </section>
+        <div class="slds-backdrop slds-backdrop_open"></div>
+    </template>
+
+    <!-- Course Modal -->
+    <template if:true={isCourseModalOpen}>
+        <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open">
+            <div class="slds-modal__container">
+                <header class="slds-modal__header">
+                    <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse"
+                            title="Close" onclick={closeCourseModal}>
+                        <lightning-icon icon-name="utility:close" alternative-text="close" size="small"></lightning-icon>
+                        <span class="slds-assistive-text">Close</span>
+                    </button>
+                    <h2 class="slds-text-heading_medium">Course Details</h2>
+                </header>
+                <div class="slds-modal__content slds-p-around_medium">
+                    <p><strong>Name:</strong> {course.Name}</p>
+                    <p><strong>Duration:</strong> {course.Duration__c}</p>
+                    <p><strong>Date:</strong> {course.Date__c}</p>
+                    <p><strong>Number of Seats:</strong> {course.Number_Of_Seats__c}</p>
+                    <lightning-button variant="brand" label="Enroll" onclick={openEnrollModal}></lightning-button>
+                </div>
+                <footer class="slds-modal__footer">
+                    <lightning-button variant="neutral" label="Close" onclick={closeCourseModal}></lightning-button>
+                </footer>
+            </div>
+        </section>
+        <div class="slds-backdrop slds-backdrop_open"></div>
+    </template>
+
+    <!-- Enroll Modal -->
+    <template if:true={isEnrollModalOpen}>
+        <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open">
+            <div class="slds-modal__container">
+                <header class="slds-modal__header">
+                    <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse"
+                            title="Close" onclick={closeEnrollModal}>
+                        <lightning-icon icon-name="utility:close" alternative-text="close" size="small"></lightning-icon>
+                        <span class="slds-assistive-text">Close</span>
+                    </button>
+                    <h2 class="slds-text-heading_medium">Enroll Student</h2>
+                </header>
+                <div class="slds-modal__content slds-p-around_medium">
+                    <lightning-input label="Student Name" value={studentName} onchange={handleStudentNameChange}></lightning-input>
+                    <lightning-input label="Student Email" value={studentEmail} onchange={handleStudentEmailChange}></lightning-input>
+                </div>
+                <footer class="slds-modal__footer">
+                    <lightning-button variant="neutral" label="Cancel" onclick={closeEnrollModal}></lightning-button>
+                    <lightning-button variant="brand" label="Enroll" onclick={handleEnroll}></lightning-button>
+                </footer>
+            </div>
+        </section>
+        <div class="slds-backdrop slds-backdrop_open"></div>
+    </template>
 </template>
+
+
+import { LightningElement, track } from 'lwc';
+import { ShowToastEvent } from 'lightning/platformShowToastEvent';
+import searchCourses from '@salesforce/apex/StudentCourseController.searchCourses';
+import getInstructorById from '@salesforce/apex/StudentCourseController.getInstructorById';
+import getCourseById from '@salesforce/apex/StudentCourseController.getCourseById';
+import enrollStudent from '@salesforce/apex/StudentCourseController.enrollStudent';
+
+export default class StudentCourseSearch extends LightningElement {
+    @track searchTerm = '';
+    @track courses = [];
+    @track columns = [
+        { label: 'Course Name', fieldName: 'Name', type: 'button', typeAttributes: { label: { fieldName: 'Name' }, name: 'view_course', variant: 'base' } },
+        { label: 'Instructor Name', fieldName: 'InstructorName', type: 'button', typeAttributes: { label: { fieldName: 'InstructorName' }, name: 'view_instructor', variant: 'base' } },
+        { label: 'Available Seats', fieldName: 'AvailableSeats', type: 'number' }
+    ];
+
+    @track instructor = {};
+    @track course = {};
+    @track studentName = '';
+    @track studentEmail = '';
+    @track isInstructorModalOpen = false;
+    @track isCourseModalOpen = false;
+    @track isEnrollModalOpen = false;
+
+    handleInputChange(event) {
+        this.searchTerm = event.target.value;
+    }
+
+    handleSearch() {
+        searchCourses({ searchTerm: this.searchTerm })
+            .then(result => {
+                this.courses = result;
+            })
+            .catch(error => {
+                this.dispatchEvent(
+                    new ShowToastEvent({
+                        title: 'Error loading courses',
+                        message: error.body.message,
+                        variant: 'error',
+                    }),
+                );
+            });
+    }
+
+    handleRowAction(event) {
+        const actionName = event.detail.action.name;
+        const row = event.detail.row;
+        if (actionName === 'view_course') {
+            this.openCourseModal(row.Id);
+        } else if (actionName === 'view_instructor') {
+            this.openInstructorModal(row.InstructorId);
+        }
+    }
+
+    openInstructorModal(instructorId) {
+        getInstructorById({ instructorId })
+            .then(result => {
+                this.instructor = result;
+                this.isInstructorModalOpen = true;
+            })
+            .catch(error => {
+                this.dispatchEvent(
+                    new ShowToastEvent({
+                        title: 'Error loading instructor',
+                        message: error.body.message,
+                        variant: 'error',
+                    }),
+                );
+            });
+    }
+
+    closeInstructorModal() {
+        this.isInstructorModalOpen = false;
+    }
+
+    openCourseModal(courseId) {
+        getCourseById({ courseId })
+            .then(result => {
+                this.course = result;
+                this.isCourseModalOpen = true;
+            })
+            .catch(error => {
+                this.dispatchEvent(
+                    new ShowToastEvent({
+                        title: 'Error loading course',
+                        message: error.body.message,
+                        variant: 'error',
+                    }),
+                );
+            });
+    }
+
+    closeCourseModal() {
+        this.isCourseModalOpen = false;
+    }
+
+    openEnrollModal() {
+        this.isEnrollModalOpen = true;
+    }
+
+    closeEnrollModal() {
+        this.isEnrollModalOpen = false;
+    }
+
+    handleStudentNameChange(event) {
+        this.studentName = event.target.value;
+    }
+
+    handleStudentEmailChange(event) {
+        this.studentEmail = event.target.value;
+    }
+
+    handleEnroll() {
+        enrollStudent({
+            studentName: this.studentName,
+            studentEmail: this.studentEmail,
+            courseId: this.course.Id
+        })
+            .then(() => {
+                this.dispatchEvent(
+                    new ShowToastEvent({
+                        title: 'Success',
+                        message: 'Student enrolled successfully',
+                        variant: 'success',
+                    }),
+                );
+                this.closeEnrollModal();
+                this.closeCourseModal();
+            })
+            .catch(error => {
+                this.dispatchEvent(
+                    new ShowToastEvent({
+                        title: 'Error enrolling student',
+                        message: error.body.message,
+                        variant: 'error',
+                    }),
+                );
+            });
+    }
+}
