@@ -1,158 +1,88 @@
-<template>
-    <lightning-tabset variant="scoped" active-tab-value={activeTab} onactive={handleActiveTab}>
-        <template for:each={months} for:item="month">
-            <lightning-tab key={month.key} label={month.label} value={month.key}>
-                <div class="slds-m-around_medium">
-                    <div class="slds-grid slds-gutters">
-                        <div class="slds-col slds-size_1-of-4">
-                            <lightning-input type="text" label="Search" onchange={handleSearchKeyChange} class="slds-m-bottom_small"></lightning-input>
-                        </div>
-                        <div class="slds-col slds-size_1-of-4">
-                            <lightning-combobox
-                                label="Renewal Status"
-                                value={renewalStatus}
-                                placeholder="Select Renewal Status"
-                                options={renewalStatusOptions}
-                                onchange={handleRenewalStatusChange}
-                                class="slds-m-bottom_small">
-                            </lightning-combobox>
-                        </div>
-                        <div class="slds-col slds-size_1-of-4">
-                            <lightning-combobox
-                                label="Open Enrollment Status"
-                                value={openEnrollmentStatus}
-                                placeholder="Select Open Enrollment Status"
-                                options={openEnrollmentStatusOptions}
-                                onchange={handleOpenEnrollmentStatusChange}
-                                class="slds-m-bottom_small">
-                            </lightning-combobox>
-                        </div>
-                        <div class="slds-col slds-size_1-of-4 slds-align_absolute-center">
-                            <lightning-button label="Access Shield Renewal" onclick={handleAccessShieldRenewal} class="slds-m-bottom_small"></lightning-button>
-                        </div>
-                    </div>
-                    <template if:true={contracts.length}>
-                        <lightning-datatable
-                            data={contracts}
-                            columns={columns}
-                            key-field="ContractNumber"
-                            hide-checkbox-column
-                            show-row-number-column>
-                        </lightning-datatable>
-                    </template>
-                    <template if:false={contracts.length}>
-                        <lightning-spinner alternative-text="Loading"></lightning-spinner>
-                    </template>
-                </div>
-            </lightning-tab>
-        </template>
-    </lightning-tabset>
-</template>
+Dear {!Student__c.Name},
+
+Thank you for enrolling in the course.
+
+Course Name: {!Course__c.Name}
+Instructor Name: {!Course__c.Instructor__r.Name}
+Course Duration: {!Course__c.Duration__c}
+
+Best regards,
+Your Training Team
 
 
-
-import { LightningElement, track } from 'lwc';
-import getCurrentMonthContracts from '@salesforce/apex/GetContractData.getCurrentMonthContracts';
-
-export default class ContractTabs extends LightningElement {
-    @track months = [];
-    @track activeTab = '';
-    @track contracts = [];
-    @track searchKey = '';
-    @track renewalStatus = 'None';
-    @track openEnrollmentStatus = 'None';
-
-    columns = [
-        { label: 'Account Name', fieldName: 'AccountName', type: 'text' },
-        { label: 'Group ID', fieldName: 'Group_ID__c', type: 'text' },
-        { label: 'Renewal Date', fieldName: 'Renewal_Date__c', type: 'date' },
-        { label: 'No of Employees', fieldName: 'No_of_Employees__c', type: 'number' },
-        { label: 'No of Active Members', fieldName: 'No_of_Active_Members__c', type: 'number' },
-        { label: 'Current Premium', fieldName: 'Current_Premium__c', type: 'currency' },
-        { label: 'Renewal Premium', fieldName: 'Renewal_Premium__c', type: 'currency' },
-        { label: '% Change', fieldName: 'Change__c', type: 'currency' },
-        { label: 'Renewal Status', fieldName: 'Renewal_Status__c', type: 'text' },
-        { label: 'Open Enrollment Status', fieldName: 'Open_Enrollment_Status__c', type: 'text' },
-        { label: 'Renewal Iterations', fieldName: 'Renewal_Iterations__c', type: 'number' }
-    ];
-
-    connectedCallback() {
-        this.initializeMonths();
-    }
-
-    initializeMonths() {
-        const today = new Date();
-        for (let i = -3; i <= 8; i++) {
-            let date = new Date(today.getFullYear(), today.getMonth() + i, 1);
-            this.months.push({
-                label: `${date.toLocaleString('default', { month: 'long' })} ${date.getFullYear()}`,
-                key: `${date.getFullYear()}-${date.getMonth() + 1}`
-            });
-        }
-        this.activeTab = this.months[3].key; // Set current month as the active tab
-        this.loadContracts(this.activeTab);
-    }
-
-    handleActiveTab(event) {
-        const tabValue = event.detail.value;
-        this.activeTab = tabValue;
-        this.loadContracts(tabValue);
-    }
-
-    handleSearchKeyChange(event) {
-        this.searchKey = event.target.value;
-    }
-
-    handleRenewalStatusChange(event) {
-        this.renewalStatus = event.target.value;
-    }
-
-    handleOpenEnrollmentStatusChange(event) {
-        this.openEnrollmentStatus = event.target.value;
-    }
-
-    handleAccessShieldRenewal() {
-        this.loadContracts(this.activeTab);
-    }
-
-    loadContracts(tabValue) {
-        if (!tabValue) {
-            return;
-        }
-        const [year, month] = tabValue.split('-').map(Number);
-        getCurrentMonthContracts({ 
-            month, 
-            year, 
-            searchKey: this.searchKey, 
-            renewalStatus: this.renewalStatus, 
-            openEnrollmentStatus: this.openEnrollmentStatus 
-        })
-        .then(result => {
-            this.contracts = result.map(contract => ({
-                ...contract,
-                AccountName: contract.Account.Name
-            }));
-        })
-        .catch(error => {
-            console.error('Error:', error);
-        });
-    }
-
-    get renewalStatusOptions() {
-        return [
-            { label: 'None', value: 'None' },
-            { label: 'Not Started', value: 'Not Started' },
-            { label: 'In Progress', value: 'In Progress' },
-            { label: 'Completed', value: 'Completed' }
+public with sharing class StudentCourseController {
+    @AuraEnabled(cacheable=true)
+    public static List<CourseWrapper> searchCourses(String searchTerm) {
+        String searchPattern = '%' + searchTerm + '%';
+        List<Course__c> courses = [
+            SELECT Id, Name, Number_Of_Seat__c, Number_of_Enrolled_Students__c, Instructor__r.Name, Instructor__c, Duration__c
+            FROM Course__c
+            WHERE Name LIKE :searchPattern
         ];
+        
+        List<CourseWrapper> courseWrappers = new List<CourseWrapper>();
+        for (Course__c course : courses) {
+            Integer availableSeats = Integer.valueOf(course.Number_Of_Seat__c) - Integer.valueOf(course.Number_of_Enrolled_Students__c != null ? course.Number_of_Enrolled_Students__c : 0);
+            courseWrappers.add(new CourseWrapper(course, availableSeats));
+        }
+        
+        return courseWrappers;
     }
 
-    get openEnrollmentStatusOptions() {
-        return [
-            { label: 'None', value: 'None' },
-            { label: 'Not Started', value: 'Not Started' },
-            { label: 'In Progress', value: 'In Progress' },
-            { label: 'Completed', value: 'Completed' }
-        ];
+    @AuraEnabled(cacheable=true)
+    public static Instructor__c getInstructorById(Id instructorId) {
+        List<Instructor__c> instructors = [SELECT Id, Name, Email__c FROM Instructor__c WHERE Id = :instructorId];
+        if (instructors.isEmpty()) {
+            return null;
+        }
+        return instructors[0];
+    }
+
+    @AuraEnabled(cacheable=true)
+    public static Course__c getCourseById(Id courseId) {
+        return [SELECT Id, Name, Duration__c, Date__c, Number_Of_Seat__c, Instructor__r.Name FROM Course__c WHERE Id = :courseId];
+    }
+
+    @AuraEnabled
+    public static void enrollStudent(String studentName, String studentEmail, Id courseId) {
+        Course__c course = [SELECT Name, Instructor__r.Name, Duration__c FROM Course__c WHERE Id = :courseId];
+        Instructor__c instructor = [SELECT Name FROM Instructor__c WHERE Id = :course.Instructor__c LIMIT 1];
+
+        Student__c newStudent = new Student__c();
+        newStudent.Name = studentName;
+        newStudent.Email__c = studentEmail;
+        newStudent.Course__c = courseId;
+        insert newStudent;
+
+        // Send email
+        String emailBody = 'Dear ' + studentName + ',\n\n' +
+                           'Thank you for enrolling in the course.\n\n' +
+                           'Course Name: ' + course.Name + '\n' +
+                           'Instructor Name: ' + instructor.Name + '\n' +
+                           'Course Duration: ' + course.Duration__c + '\n\n' +
+                           'Best regards,\n' +
+                           'Your Training Team';
+
+        Messaging.SingleEmailMessage email = new Messaging.SingleEmailMessage();
+        email.setToAddresses(new String[] { studentEmail });
+        email.setSubject('Confirmation of Enrollment in ' + course.Name);
+        email.setPlainTextBody(emailBody);
+        Messaging.sendEmail(new Messaging.SingleEmailMessage[] { email });
+    }
+
+    public class CourseWrapper {
+        @AuraEnabled public String Id;
+        @AuraEnabled public String Name;
+        @AuraEnabled public String InstructorName;
+        @AuraEnabled public Integer AvailableSeats;
+        @AuraEnabled public String InstructorId;
+
+        public CourseWrapper(Course__c course, Integer availableSeats) {
+            this.Id = course.Id;
+            this.Name = course.Name;
+            this.InstructorName = course.Instructor__r.Name;
+            this.InstructorId = course.Instructor__c;
+            this.AvailableSeats = availableSeats;
+        }
     }
 }
