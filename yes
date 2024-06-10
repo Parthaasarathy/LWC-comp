@@ -1,75 +1,78 @@
-import { LightningElement, track, wire } from 'lwc';
-import { ShowToastEvent } from 'lightning/platformShowToastEvent';
-import createCourse from '@salesforce/apex/CourseController.createCourse';
-import getInstructors from '@salesforce/apex/CourseController.getInstructors';
+public with sharing class StudentCourseController {
+    @AuraEnabled(cacheable=true)
+    public static List<CourseWrapper> searchCourses(String searchTerm) {
+        String searchPattern = '%' + searchTerm + '%';
+        List<Course__c> courses = [
+            SELECT Id, Name, Number_Of_Seats__c, Instructor__r.Name
+            FROM Course__c
+            WHERE Name LIKE :searchPattern
+        ];
+        
+        List<CourseWrapper> courseWrappers = new List<CourseWrapper>();
+        for (Course__c course : courses) {
+            Integer availableSeats = course.Number_Of_Seats__c - (course.Number_of_Enrolled_Students__c != null ? course.Number_of_Enrolled_Students__c : 0);
+            courseWrappers.add(new CourseWrapper(course, availableSeats));
+        }
+        
+        return courseWrappers;
+    }
 
-export default class CreateCourse extends LightningElement {
-    @track courseName = '';
-    @track duration = '';
-    @track numberOfSeats = '';
-    @track courseDate = ''; // updated variable name
-    @track selectedInstructor = '';
-    @track instructorOptions = [];
+    public class CourseWrapper {
+        @AuraEnabled public String Id;
+        @AuraEnabled public String Name;
+        @AuraEnabled public String InstructorName;
+        @AuraEnabled public Integer AvailableSeats;
 
-    @wire(getInstructors)
-    wiredInstructors({ error, data }) {
-        if (data) {
-            this.instructorOptions = data.map(instructor => {
-                return { label: instructor.Name, value: instructor.Id };
-            });
-        } else if (error) {
-            this.dispatchEvent(
-                new ShowToastEvent({
-                    title: 'Error loading instructors',
-                    message: error.body.message,
-                    variant: 'error',
-                }),
-            );
+        public CourseWrapper(Course__c course, Integer availableSeats) {
+            this.Id = course.Id;
+            this.Name = course.Name;
+            this.InstructorName = course.Instructor__r.Name;
+            this.AvailableSeats = availableSeats;
         }
     }
+}
+
+
+<template>
+    <lightning-card title="Course Search">
+        <div class="slds-p-around_medium">
+            <lightning-input label="Search Courses" value={searchTerm} onchange={handleInputChange} placeholder="Enter course name"></lightning-input>
+            <lightning-button variant="brand" label="Search" onclick={handleSearch}></lightning-button>
+        </div>
+        <template if:true={courses}>
+            <lightning-datatable key-field="Id" data={courses} columns={columns}>
+            </lightning-datatable>
+        </template>
+    </lightning-card>
+</template>
+
+
+import { LightningElement, track } from 'lwc';
+import { ShowToastEvent } from 'lightning/platformShowToastEvent';
+import searchCourses from '@salesforce/apex/StudentCourseController.searchCourses';
+
+export default class StudentCourseSearch extends LightningElement {
+    @track searchTerm = '';
+    @track courses = [];
+    @track columns = [
+        { label: 'Course Name', fieldName: 'Name' },
+        { label: 'Instructor Name', fieldName: 'InstructorName' },
+        { label: 'Available Seats', fieldName: 'AvailableSeats', type: 'number' }
+    ];
 
     handleInputChange(event) {
-        const field = event.target.dataset.id;
-        if (field === 'Name') {
-            this.courseName = event.target.value;
-        } else if (field === 'Duration__c') {
-            this.duration = event.target.value;
-        } else if (field === 'Number_Of_Seats__c') {
-            this.numberOfSeats = event.target.value;
-        } else if (field === 'Date__c') {
-            this.courseDate = event.target.value; // updated variable name
-        } else if (field === 'Instructor__c') {
-            this.selectedInstructor = event.target.value;
-        }
+        this.searchTerm = event.target.value;
     }
 
-    handleCreateCourse() {
-        createCourse({ 
-            name: this.courseName, 
-            duration: this.duration, 
-            numberOfSeats: this.numberOfSeats, 
-            courseDate: this.courseDate, // updated variable name
-            instructorId: this.selectedInstructor 
-        })
-            .then(courseId => {
-                this.dispatchEvent(
-                    new ShowToastEvent({
-                        title: 'Success',
-                        message: 'Course created with Id: ' + courseId,
-                        variant: 'success',
-                    }),
-                );
-                // Reset form
-                this.courseName = '';
-                this.duration = '';
-                this.numberOfSeats = '';
-                this.courseDate = ''; // updated variable name
-                this.selectedInstructor = '';
+    handleSearch() {
+        searchCourses({ searchTerm: this.searchTerm })
+            .then(result => {
+                this.courses = result;
             })
             .catch(error => {
                 this.dispatchEvent(
                     new ShowToastEvent({
-                        title: 'Error creating record',
+                        title: 'Error loading courses',
                         message: error.body.message,
                         variant: 'error',
                     }),
