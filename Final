@@ -46,3 +46,25 @@ public class ClaimApprovalProcess {
         Messaging.sendEmail(new Messaging.SingleEmailMessage[] {email});
     }
 }
+
+
+trigger ClaimApprovalTrigger on Claim__c (after insert, after update) {
+    // Instantiate the ClaimApprovalProcess class
+    ClaimApprovalProcess claimApprovalProcess = new ClaimApprovalProcess();
+    
+    // Run the process only if there are claims with the status "Submitted"
+    List<Claim__c> claimsToProcess = new List<Claim__c>();
+    
+    for (Claim__c claim : Trigger.new) {
+        // Check if the claim status is 'Submitted' and was either newly inserted or updated from a different status
+        if (claim.Status__c == 'Submitted' && 
+            (Trigger.isInsert || (Trigger.isUpdate && claim.Status__c != Trigger.oldMap.get(claim.Id).Status__c))) {
+            claimsToProcess.add(claim);
+        }
+    }
+    
+    // If there are claims to process, call the processClaims method
+    if (!claimsToProcess.isEmpty()) {
+        claimApprovalProcess.processClaims();
+    }
+}
