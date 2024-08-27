@@ -1,51 +1,55 @@
 <template>
-    <lightning-card title="Opportunity">
-        <lightning-datatable key-field="id" data={opportunities} columns={columns}>
+    <lightning-card>
+        <lightning-datatable 
+            key-field="id" 
+            data={opportunityData} 
+            columns={columns}>
         </lightning-datatable>
     </lightning-card>
 </template>
 
-
 import { LightningElement, api, track, wire } from 'lwc';
 import getOpportunities from '@salesforce/apex/OpportunityController.getOpportunities';
 
-const columns = [
-    { label: 'Id', fieldName: 'Id' },
-    { label: 'Name', fieldName: 'Name' },
-    { label: 'Amount', fieldName: 'Amount' },
-    { label: 'Expected Revenue', fieldName: 'ExpectedRevenue' },
-    { label: 'Close Date', fieldName: 'CloseDate' }
-];
-
 export default class ResultComponent extends LightningElement {
     @api stage;
-    @api sortField;
-    @api sortOrder;
+    @api sortfield;
+    @api sortorder;
 
-    @track opportunities;
-    @track columns = columns;
+    @track opportunityData = [];
+    @track columns = [
+        { label: 'Id', fieldName: 'Id' },
+        { label: 'Name', fieldName: 'Name' },
+        { label: 'Amount', fieldName: 'Amount' },
+        { label: 'Expected Revenue', fieldName: 'ExpectedRevenue' },
+        { label: 'Close Date', fieldName: 'CloseDate', type: 'date' },
+    ];
 
-    @wire(getOpportunities, { stage: '$stage', sortField: '$sortField', sortOrder: '$sortOrder' })
+    @wire(getOpportunities, { stage: '$stage', sortField: '$sortfield', sortOrder: '$sortorder' })
     wiredOpportunities({ error, data }) {
         if (data) {
-            this.opportunities = data;
+            this.opportunityData = data;
         } else if (error) {
-            // handle error
-            this.opportunities = [];
+            this.opportunityData = [];
+            console.error(error);
         }
     }
 }
+
+
 
 public with sharing class OpportunityController {
     @AuraEnabled(cacheable=true)
     public static List<Opportunity> getOpportunities(String stage, String sortField, String sortOrder) {
         String query = 'SELECT Id, Name, Amount, ExpectedRevenue, CloseDate FROM Opportunity';
-
-        if (!String.isBlank(stage)) {
+        
+        if (stage != 'All') {
             query += ' WHERE StageName = :stage';
         }
-
-        query += ' ORDER BY ' + sortField + ' ' + sortOrder;
+        
+        if (sortField != null && sortOrder != null) {
+            query += ' ORDER BY ' + sortField + ' ' + sortOrder;
+        }
 
         return Database.query(query);
     }
