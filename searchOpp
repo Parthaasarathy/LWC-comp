@@ -1,15 +1,15 @@
 <template>
-    <lightning-card title="Search Opportunities">
-        <div class="slds-p-horizontal_small">
-            <!-- Get Record by Stage -->
+    <lightning-card title="Find Opportunity">
+        <div class="slds-p-around_medium">
+            <!-- Picklist for Stage -->
             <lightning-combobox label="Get Record by Stage"
                                 value={stageValue}
-                                placeholder="Select Stage"
+                                placeholder="Select a Stage"
                                 options={stageOptions}
                                 onchange={handleStageChange}>
             </lightning-combobox>
 
-            <!-- Sort by Field -->
+            <!-- Picklist for Field to Sort By -->
             <lightning-combobox label="Sort by Field"
                                 value={sortFieldValue}
                                 placeholder="Select Field"
@@ -17,47 +17,42 @@
                                 onchange={handleSortFieldChange}>
             </lightning-combobox>
 
-            <!-- Sort Order -->
+            <!-- Picklist for Sort Order -->
             <lightning-combobox label="Sort Order"
                                 value={sortOrderValue}
-                                placeholder="Select Sort Order"
+                                placeholder="Select Order"
                                 options={sortOrderOptions}
                                 onchange={handleSortOrderChange}>
             </lightning-combobox>
-
-            <!-- Search Button -->
-            <lightning-button label="Search" onclick={handleSearch} class="slds-m-top_small"></lightning-button>
         </div>
+
+        <!-- Child Component -->
+        <c-result-component stage={stageValue} sort-field={sortFieldValue} sort-order={sortOrderValue}></c-result-component>
     </lightning-card>
-
-    <!-- Child Component to Display Results -->
-    <c-opportunity-results></c-opportunity-results>
 </template>
-
 
 
 import { LightningElement, track } from 'lwc';
 
-export default class SearchOpportunities extends LightningElement {
+export default class SearchComponent extends LightningElement {
     @track stageValue = '';
-    @track sortFieldValue = '';
-    @track sortOrderValue = '';
+    @track sortFieldValue = 'Name';
+    @track sortOrderValue = 'ASC';
 
+    // Dummy values for picklists
     stageOptions = [
+        { label: 'All', value: '' },
         { label: 'Prospecting', value: 'Prospecting' },
         { label: 'Qualification', value: 'Qualification' },
-        { label: 'Needs Analysis', value: 'Needs Analysis' },
-        { label: 'Proposal/Price Quote', value: 'Proposal/Price Quote' },
-        { label: 'Negotiation/Review', value: 'Negotiation/Review' },
-        { label: 'Closed Won', value: 'Closed Won' },
-        { label: 'Closed Lost', value: 'Closed Lost' }
+        // Add other stages as needed
     ];
 
     sortFieldOptions = [
+        { label: 'Name', value: 'Name' },
         { label: 'Amount', value: 'Amount' },
+        { label: 'Expected Revenue', value: 'ExpectedRevenue' },
         { label: 'Close Date', value: 'CloseDate' },
-        { label: 'Created Date', value: 'CreatedDate' },
-        { label: 'Last Modified Date', value: 'LastModifiedDate' }
+        // Add other fields as needed
     ];
 
     sortOrderOptions = [
@@ -66,28 +61,16 @@ export default class SearchOpportunities extends LightningElement {
     ];
 
     handleStageChange(event) {
-        this.stageValue = event.target.value;
+        this.stageValue = event.detail.value;
     }
 
     handleSortFieldChange(event) {
-        this.sortFieldValue = event.target.value;
+        this.sortFieldValue = event.detail.value;
     }
 
     handleSortOrderChange(event) {
-        this.sortOrderValue = event.target.value;
-    }
-
-    handleSearch() {
-        const searchCriteria = {
-            stage: this.stageValue,
-            sortField: this.sortFieldValue,
-            sortOrder: this.sortOrderValue
-        };
-
-        // Fire a custom event to send data to the child component
-        const searchEvent = new CustomEvent('search', {
-            detail: searchCriteria
-        });
-        this.template.querySelector('c-opportunity-results').handleSearchCriteria(searchCriteria);
+        this.sortOrderValue = event.detail.value;
     }
 }
+
+
