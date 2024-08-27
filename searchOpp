@@ -1,33 +1,36 @@
 <template>
-    <lightning-card title="Find Opportunity">
+    <lightning-card title="Find Opportunity" icon-name="standard:opportunity">
         <div class="slds-p-around_medium">
-            <!-- Picklist for Stage -->
-            <lightning-combobox label="Get Record by Stage"
-                                value={stageValue}
-                                placeholder="Select a Stage"
-                                options={stageOptions}
-                                onchange={handleStageChange}>
+            <lightning-combobox 
+                label="Get Record by Stage" 
+                value={stageValue} 
+                placeholder="Select Stage" 
+                options={stageOptions} 
+                onchange={handleStageChange}>
+            </lightning-combobox>
+            
+            <lightning-combobox 
+                label="Sort by Field" 
+                value={fieldValue} 
+                placeholder="Select Field" 
+                options={fieldOptions} 
+                onchange={handleFieldChange}>
             </lightning-combobox>
 
-            <!-- Picklist for Field to Sort By -->
-            <lightning-combobox label="Sort by Field"
-                                value={sortFieldValue}
-                                placeholder="Select Field"
-                                options={sortFieldOptions}
-                                onchange={handleSortFieldChange}>
-            </lightning-combobox>
-
-            <!-- Picklist for Sort Order -->
-            <lightning-combobox label="Sort Order"
-                                value={sortOrderValue}
-                                placeholder="Select Order"
-                                options={sortOrderOptions}
-                                onchange={handleSortOrderChange}>
+            <lightning-combobox 
+                label="Sort Order" 
+                value={sortOrderValue} 
+                placeholder="Select Sort Order" 
+                options={sortOrderOptions} 
+                onchange={handleSortOrderChange}>
             </lightning-combobox>
         </div>
-
-        <!-- Child Component -->
-        <c-result-component stage={stageValue} sort-field={sortFieldValue} sort-order={sortOrderValue}></c-result-component>
+        
+        <c-result-component 
+            stage={stageValue} 
+            sortfield={fieldValue} 
+            sortorder={sortOrderValue}>
+        </c-result-component>
     </lightning-card>
 </template>
 
@@ -36,41 +39,44 @@ import { LightningElement, track } from 'lwc';
 
 export default class SearchComponent extends LightningElement {
     @track stageValue = '';
-    @track sortFieldValue = 'Name';
-    @track sortOrderValue = 'ASC';
+    @track fieldValue = '';
+    @track sortOrderValue = '';
 
-    // Dummy values for picklists
-    stageOptions = [
-        { label: 'All', value: '' },
-        { label: 'Prospecting', value: 'Prospecting' },
-        { label: 'Qualification', value: 'Qualification' },
-        // Add other stages as needed
-    ];
+    get stageOptions() {
+        return [
+            { label: 'All', value: 'All' },
+            { label: 'Prospecting', value: 'Prospecting' },
+            { label: 'Qualification', value: 'Qualification' },
+            { label: 'Proposal/Price Quote', value: 'Proposal/Price Quote' },
+            // Add more stages as needed
+        ];
+    }
 
-    sortFieldOptions = [
-        { label: 'Name', value: 'Name' },
-        { label: 'Amount', value: 'Amount' },
-        { label: 'Expected Revenue', value: 'ExpectedRevenue' },
-        { label: 'Close Date', value: 'CloseDate' },
-        // Add other fields as needed
-    ];
+    get fieldOptions() {
+        return [
+            { label: 'Name', value: 'Name' },
+            { label: 'Amount', value: 'Amount' },
+            { label: 'Expected Revenue', value: 'ExpectedRevenue' },
+            { label: 'Close Date', value: 'CloseDate' },
+        ];
+    }
 
-    sortOrderOptions = [
-        { label: 'Ascending', value: 'ASC' },
-        { label: 'Descending', value: 'DESC' }
-    ];
+    get sortOrderOptions() {
+        return [
+            { label: 'Ascending', value: 'ASC' },
+            { label: 'Descending', value: 'DESC' }
+        ];
+    }
 
     handleStageChange(event) {
         this.stageValue = event.detail.value;
     }
 
-    handleSortFieldChange(event) {
-        this.sortFieldValue = event.detail.value;
+    handleFieldChange(event) {
+        this.fieldValue = event.detail.value;
     }
 
     handleSortOrderChange(event) {
         this.sortOrderValue = event.detail.value;
     }
 }
-
-
