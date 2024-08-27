@@ -1,201 +1,48 @@
-import { LightningElement, track } from 'lwc';
-import { ShowToastEvent } from 'lightning/platformShowToastEvent';
-import searchCourses from '@salesforce/apex/StudentCourseController.searchCourses';
-import getInstructorById from '@salesforce/apex/StudentCourseController.getInstructorById';
-import getCourseById from '@salesforce/apex/StudentCourseController.getCourseById';
-import enrollStudent from '@salesforce/apex/StudentCourseController.enrollStudent';
+public class ClaimApprovalProcess {
+    private static final Decimal APPROVED_LIMIT = 10000;
 
-export default class StudentCourseSearch extends LightningElement {
-    @track searchTerm = '';
-    @track courses = [];
-    @track columns = [
-        { label: 'Course Name', fieldName: 'Name', type: 'button', typeAttributes: { label: { fieldName: 'Name' }, name: 'view_course', variant: 'base' } },
-        { label: 'Instructor Name', fieldName: 'InstructorName', type: 'button', typeAttributes: { label: { fieldName: 'InstructorName' }, name: 'view_instructor', variant: 'base' } },
-        { label: 'Available Seats', fieldName: 'AvailableSeats', type: 'number' }
-    ];
+    public static void processClaims(List<Claim__c> claims) {
+        // Get the User Id of the claims manager named 'John Walker'
+        User claimsManager;
+        try {
+            claimsManager = [SELECT Id FROM User WHERE Name = 'John Walker' LIMIT 1];
+        } catch (Exception e) {
+            throw new Exception('Manager not found: ' + e.getMessage());
+        }
 
-    @track instructor = {};
-    @track course = {};
-    @track studentName = '';
-    @track studentEmail = '';
-    @track isInstructorModalOpen = false;
-    @track isCourseModalOpen = false;
-    @track isEnrollModalOpen = false;
+        // List to store claims to update
+        List<Claim__c> claimsToUpdate = new List<Claim__c>();
 
-    handleInputChange(event) {
-        this.searchTerm = event.target.value;
-    }
+        for (Claim__c claim : claims) {
+            if (claim.Claim_Amount__c <= APPROVED_LIMIT) {
+                // Update the status to 'Approved'
+                claim.Status__c = 'Approved';
+                claimsToUpdate.add(claim);
+                
+                // Send email notification
+                sendApprovalEmail(claim);
+            } else {
+                // Update the status to 'Requires Manual Review'
+                claim.Status__c = 'Requires Manual Review';
+                claim.OwnerId = claimsManager.Id;  // Assign to claims manager
+                claimsToUpdate.add(claim);
+            }
+        }
 
-    handleSearch() {
-        searchCourses({ searchTerm: this.searchTerm })
-            .then(result => {
-                this.courses = result;
-            })
-            .catch(error => {
-                this.dispatchEvent(
-                    new ShowToastEvent({
-                        title: 'Error loading courses',
-                        message: error.body.message,
-                        variant: 'error',
-                    }),
-                );
-            });
-    }
-
-    handleRowAction(event) {
-        const actionName = event.detail.action.name;
-        const row = event.detail.row;
-        if (actionName === 'view_course') {
-            this.openCourseModal(row.Id);
-        } else if (actionName === 'view_instructor') {
-            this.openInstructorModal(row.InstructorId);
+        // Update the claims in the database
+        if (!claimsToUpdate.isEmpty()) {
+            update claimsToUpdate;
         }
     }
+    
+    private static void sendApprovalEmail(Claim__c claim) {
+        // Construct the email message
+        Messaging.SingleEmailMessage email = new Messaging.SingleEmailMessage();
+        email.setToAddresses(new String[] {claim.Claimant_Email__c});
+        email.setSubject('Your Claim has been Approved');
+        email.setPlainTextBody('Dear Claimant, your claim with ID ' + claim.Id + ' has been approved.');
 
-    openInstructorModal(instructorId) {
-        getInstructorById({ instructorId })
-            .then(result => {
-                this.instructor = result;
-                this.isInstructorModalOpen = true;
-            })
-            .catch(error => {
-                this.dispatchEvent(
-                    new ShowToastEvent({
-                        title: 'Error loading instructor',
-                        message: error.body.message,
-                        variant: 'error',
-                    }),
-                );
-            });
-    }
-
-    closeInstructorModal() {
-        this.isInstructorModalOpen = false;
-    }
-
-    openCourseModal(courseId) {
-        getCourseById({ courseId })
-            .then(result => {
-                this.course = result;
-                this.isCourseModalOpen = true;
-            })
-            .catch(error => {
-                this.dispatchEvent(
-                    new ShowToastEvent({
-                        title: 'Error loading course',
-                        message: error.body.message,
-                        variant: 'error',
-                    }),
-                );
-            });
-    }
-
-    closeCourseModal() {
-        this.isCourseModalOpen = false;
-    }
-
-    openEnrollModal() {
-        this.isEnrollModalOpen = true;
-    }
-
-    closeEnrollModal() {
-        this.isEnrollModalOpen = false;
-    }
-
-    handleStudentNameChange(event) {
-        this.studentName = event.target.value;
-    }
-
-    handleStudentEmailChange(event) {
-        this.studentEmail = event.target.value;
-    }
-
-    handleEnroll() {
-        enrollStudent({
-            studentName: this.studentName,
-            studentEmail: this.studentEmail,
-            courseId: this.course.Id
-        })
-            .then(() => {
-                this.dispatchEvent(
-                    new ShowToastEvent({
-                        title: 'Success',
-                        message: 'Student enrolled successfully',
-                        variant: 'success',
-                    }),
-                );
-                this.closeEnrollModal();
-                this.closeCourseModal();
-            })
-            .catch(error => {
-                this.dispatchEvent(
-                    new ShowToastEvent({
-                        title: 'Error enrolling student',
-                        message: error.body.message,
-                        variant: 'error',
-                    }),
-                );
-            });
-    }
-}
-
-
-
-public with sharing class StudentCourseController {
-    @AuraEnabled(cacheable=true)
-    public static List<CourseWrapper> searchCourses(String searchTerm) {
-        String searchPattern = '%' + searchTerm + '%';
-        List<Course__c> courses = [
-            SELECT Id, Name, Number_Of_Seats__c, Number_of_Enrolled_Students__c, Instructor__r.Name, Instructor__c
-            FROM Course__c
-            WHERE Name LIKE :searchPattern
-        ];
-        
-        List<CourseWrapper> courseWrappers = new List<CourseWrapper>();
-        for (Course__c course : courses) {
-            Integer availableSeats = Integer.valueOf(course.Number_Of_Seats__c) - Integer.valueOf(course.Number_of_Enrolled_Students__c != null ? course.Number_of_Enrolled_Students__c : 0);
-            courseWrappers.add(new CourseWrapper(course, availableSeats));
-        }
-        
-        return courseWrappers;
-    }
-
-    @AuraEnabled(cacheable=true)
-    public static Instructor__c getInstructorById(Id instructorId) {
-        List<Instructor__c> instructors = [SELECT Id, Name, Email__c FROM Instructor__c WHERE Id = :instructorId];
-        if (instructors.isEmpty()) {
-            return null;
-        }
-        return instructors[0];
-    }
-
-    @AuraEnabled(cacheable=true)
-    public static Course__c getCourseById(Id courseId) {
-        return [SELECT Id, Name, Duration__c, Date__c, Number_Of_Seats__c, Number_of_Enrolled_Students__c FROM Course__c WHERE Id = :courseId];
-    }
-
-    @AuraEnabled
-    public static void enrollStudent(String studentName, String studentEmail, Id courseId) {
-        Student__c newStudent = new Student__c();
-        newStudent.Name = studentName;
-        newStudent.Email__c = studentEmail;
-        newStudent.Course__c = courseId;
-        insert newStudent;
-    }
-
-    public class CourseWrapper {
-        @AuraEnabled public String Id;
-        @AuraEnabled public String Name;
-        @AuraEnabled public String InstructorName;
-        @AuraEnabled public Integer AvailableSeats;
-        @AuraEnabled public String InstructorId;
-
-        public CourseWrapper(Course__c course, Integer availableSeats) {
-            this.Id = course.Id;
-            this.Name = course.Name;
-            this.InstructorName = course.Instructor__r.Name;
-            this.InstructorId = course.Instructor__c;
-            this.AvailableSeats = availableSeats;
-        }
+        // Send the email
+        Messaging.sendEmail(new Messaging.SingleEmailMessage[] {email});
     }
 }
