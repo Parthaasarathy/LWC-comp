@@ -1,47 +1,47 @@
 public class ClaimApprovalProcess {
     private static final Decimal APPROVED_LIMIT = 10000;
-    
-    public void processClaims() {
-        // Step 1: Retrieve all claims with a status of 'Submitted'
-        List<Claim__c> claimsToProcess = [SELECT Id, Claim_Amount__c, Status__c, Claimant_Id__c, Claimant_Email__c 
-                                          FROM Claim__c 
-                                          WHERE Status__c = 'Submitted'];
-        
+
+    public static void processClaims(List<Claim__c> claims) {
         // Get the User Id of the claims manager named 'John Walker'
-        User claimsManager = [SELECT Id FROM User WHERE Name = 'John Walker' LIMIT 1];
-        
+        User claimsManager;
+        try {
+            claimsManager = [SELECT Id FROM User WHERE Name = 'John Walker' LIMIT 1];
+        } catch (Exception e) {
+            throw new CustomException('Manager not found: ' + e.getMessage());
+        }
+
         // List to store claims to update
         List<Claim__c> claimsToUpdate = new List<Claim__c>();
-        
-        for (Claim__c claim : claimsToProcess) {
+
+        for (Claim__c claim : claims) {
             if (claim.Claim_Amount__c <= APPROVED_LIMIT) {
-                // Step 3: Update the status to 'Approved'
+                // Update the status to 'Approved'
                 claim.Status__c = 'Approved';
                 claimsToUpdate.add(claim);
                 
                 // Send email notification
                 sendApprovalEmail(claim);
             } else {
-                // Step 4: Update the status to 'Requires Manual Review'
+                // Update the status to 'Requires Manual Review'
                 claim.Status__c = 'Requires Manual Review';
                 claim.OwnerId = claimsManager.Id;  // Assign to claims manager
                 claimsToUpdate.add(claim);
             }
         }
-        
-        // Update the claims
+
+        // Update the claims in the database
         if (!claimsToUpdate.isEmpty()) {
             update claimsToUpdate;
         }
     }
     
-    private void sendApprovalEmail(Claim__c claim) {
+    private static void sendApprovalEmail(Claim__c claim) {
         // Construct the email message
         Messaging.SingleEmailMessage email = new Messaging.SingleEmailMessage();
         email.setToAddresses(new String[] {claim.Claimant_Email__c});
         email.setSubject('Your Claim has been Approved');
         email.setPlainTextBody('Dear Claimant, your claim with ID ' + claim.Id + ' has been approved.');
-        
+
         // Send the email
         Messaging.sendEmail(new Messaging.SingleEmailMessage[] {email});
     }
@@ -49,22 +49,20 @@ public class ClaimApprovalProcess {
 
 
 trigger ClaimApprovalTrigger on Claim__c (after insert, after update) {
-    // Instantiate the ClaimApprovalProcess class
-    ClaimApprovalProcess claimApprovalProcess = new ClaimApprovalProcess();
-    
-    // Run the process only if there are claims with the status "Submitted"
+    // Collect all claims with a status of 'Submitted' that need to be processed
     List<Claim__c> claimsToProcess = new List<Claim__c>();
-    
+
     for (Claim__c claim : Trigger.new) {
-        // Check if the claim status is 'Submitted' and was either newly inserted or updated from a different status
-        if (claim.Status__c == 'Submitted' && 
-            (Trigger.isInsert || (Trigger.isUpdate && claim.Status__c != Trigger.oldMap.get(claim.Id).Status__c))) {
+        // Check if the claim status is 'Submitted'
+        if (claim.Status__c == 'Submitted' &&
+            (Trigger.isInsert || 
+             (Trigger.isUpdate && claim.Status__c != Trigger.oldMap.get(claim.Id).Status__c))) {
             claimsToProcess.add(claim);
         }
     }
     
-    // If there are claims to process, call the processClaims method
+    // Only process the claims if there are any to process
     if (!claimsToProcess.isEmpty()) {
-        claimApprovalProcess.processClaims();
+        ClaimApprovalProcess.processClaims(claimsToProcess);
     }
 }
