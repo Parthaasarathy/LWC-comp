@@ -1,6 +1,7 @@
 <template>
     <lightning-card title="Search Opportunities">
         <div class="slds-p-horizontal_small">
+            <!-- Get Record by Stage -->
             <lightning-combobox label="Get Record by Stage"
                                 value={stageValue}
                                 placeholder="Select Stage"
@@ -8,6 +9,7 @@
                                 onchange={handleStageChange}>
             </lightning-combobox>
 
+            <!-- Sort by Field -->
             <lightning-combobox label="Sort by Field"
                                 value={sortFieldValue}
                                 placeholder="Select Field"
@@ -15,6 +17,7 @@
                                 onchange={handleSortFieldChange}>
             </lightning-combobox>
 
+            <!-- Sort Order -->
             <lightning-combobox label="Sort Order"
                                 value={sortOrderValue}
                                 placeholder="Select Sort Order"
@@ -22,10 +25,15 @@
                                 onchange={handleSortOrderChange}>
             </lightning-combobox>
 
+            <!-- Search Button -->
             <lightning-button label="Search" onclick={handleSearch} class="slds-m-top_small"></lightning-button>
         </div>
     </lightning-card>
+
+    <!-- Child Component to Display Results -->
+    <c-opportunity-results></c-opportunity-results>
 </template>
+
 
 
 import { LightningElement, track } from 'lwc';
@@ -38,13 +46,18 @@ export default class SearchOpportunities extends LightningElement {
     stageOptions = [
         { label: 'Prospecting', value: 'Prospecting' },
         { label: 'Qualification', value: 'Qualification' },
-        // Add all other stages...
+        { label: 'Needs Analysis', value: 'Needs Analysis' },
+        { label: 'Proposal/Price Quote', value: 'Proposal/Price Quote' },
+        { label: 'Negotiation/Review', value: 'Negotiation/Review' },
+        { label: 'Closed Won', value: 'Closed Won' },
+        { label: 'Closed Lost', value: 'Closed Lost' }
     ];
 
     sortFieldOptions = [
         { label: 'Amount', value: 'Amount' },
-        { label: 'Name', value: 'Name' },
-        // Add more fields if necessary...
+        { label: 'Close Date', value: 'CloseDate' },
+        { label: 'Created Date', value: 'CreatedDate' },
+        { label: 'Last Modified Date', value: 'LastModifiedDate' }
     ];
 
     sortOrderOptions = [
@@ -75,21 +88,6 @@ export default class SearchOpportunities extends LightningElement {
         const searchEvent = new CustomEvent('search', {
             detail: searchCriteria
         });
-        this.dispatchEvent(searchEvent);
-    }
-}
-
-
-
-public with sharing class OpportunityController {
-    @AuraEnabled(cacheable=true)
-    public static List<Opportunity> getOpportunities(Map<String, String> criteria) {
-        String stage = criteria.get('stage');
-        String sortField = criteria.get('sortField');
-        String sortOrder = criteria.get('sortOrder');
-
-        String query = 'SELECT Id, Name, StageName, Amount, CloseDate FROM Opportunity WHERE StageName = :stage ORDER BY ' + sortField + ' ' + sortOrder;
-
-        return Database.query(query);
+        this.template.querySelector('c-opportunity-results').handleSearchCriteria(searchCriteria);
     }
 }
