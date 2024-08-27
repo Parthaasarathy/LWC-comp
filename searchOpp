@@ -1,0 +1,80 @@
+<template>
+    <lightning-card title="Search Opportunities">
+        <div class="slds-p-horizontal_small">
+            <lightning-combobox label="Get Record by Stage"
+                                value={stageValue}
+                                placeholder="Select Stage"
+                                options={stageOptions}
+                                onchange={handleStageChange}>
+            </lightning-combobox>
+
+            <lightning-combobox label="Sort by Field"
+                                value={sortFieldValue}
+                                placeholder="Select Field"
+                                options={sortFieldOptions}
+                                onchange={handleSortFieldChange}>
+            </lightning-combobox>
+
+            <lightning-combobox label="Sort Order"
+                                value={sortOrderValue}
+                                placeholder="Select Sort Order"
+                                options={sortOrderOptions}
+                                onchange={handleSortOrderChange}>
+            </lightning-combobox>
+
+            <lightning-button label="Search" onclick={handleSearch} class="slds-m-top_small"></lightning-button>
+        </div>
+    </lightning-card>
+</template>
+
+
+import { LightningElement, track } from 'lwc';
+
+export default class SearchOpportunities extends LightningElement {
+    @track stageValue = '';
+    @track sortFieldValue = '';
+    @track sortOrderValue = '';
+
+    stageOptions = [
+        { label: 'Prospecting', value: 'Prospecting' },
+        { label: 'Qualification', value: 'Qualification' },
+        // Add all other stages...
+    ];
+
+    sortFieldOptions = [
+        { label: 'Amount', value: 'Amount' },
+        { label: 'Name', value: 'Name' },
+        // Add more fields if necessary...
+    ];
+
+    sortOrderOptions = [
+        { label: 'Ascending', value: 'ASC' },
+        { label: 'Descending', value: 'DESC' }
+    ];
+
+    handleStageChange(event) {
+        this.stageValue = event.target.value;
+    }
+
+    handleSortFieldChange(event) {
+        this.sortFieldValue = event.target.value;
+    }
+
+    handleSortOrderChange(event) {
+        this.sortOrderValue = event.target.value;
+    }
+
+    handleSearch() {
+        const searchCriteria = {
+            stage: this.stageValue,
+            sortField: this.sortFieldValue,
+            sortOrder: this.sortOrderValue
+        };
+
+        // Fire a custom event to send data to the child component
+        const searchEvent = new CustomEvent('search', {
+            detail: searchCriteria
+        });
+        this.dispatchEvent(searchEvent);
+    }
+}
