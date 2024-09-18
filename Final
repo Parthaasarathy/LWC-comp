@@ -28,7 +28,11 @@
                                 </template>
                             </td>
                             <td>
-                                <lightning-button label="Add Contact" data-account-id={account.Id} onclick={handleShowForm}></lightning-button>
+                                <lightning-button 
+                                    label="Add Contact" 
+                                    data-account-id={account.Id} 
+                                    onclick={handleShowForm}> <!-- Ensure this event is properly set -->
+                                </lightning-button>
                             </td>
                         </tr>
                     </template>
@@ -68,8 +72,10 @@ export default class AccountContact extends LightningElement {
     wiredAccounts({ error, data }) {
         if (data) {
             this.accounts = data;
+            console.log('Accounts and Contacts fetched:', data); // Debugging the fetched data
         } else if (error) {
             this.showToast('Error', 'Error fetching accounts', 'error');
+            console.error('Error fetching accounts:', error); // Debugging errors if data fetching fails
         }
     }
 
@@ -82,12 +88,14 @@ export default class AccountContact extends LightningElement {
     // Show the contact creation form for the selected account
     handleShowForm(event) {
         const accountId = event.target.dataset.accountId;
-        console.log('Account ID:', accountId); // Debugging line to check if accountId is captured
+        console.log('Add Contact Button Clicked! Account ID:', accountId); // Debugging line to check if accountId is captured
+        
         if (accountId) {
             this.selectedAccountId = accountId; // Set the selected accountId
             this.showForm = true; // Display the form
+            console.log('Form should now be visible'); // Add this to check if the form visibility is toggling
         } else {
-            console.error('Account ID not found!');
+            console.error('Account ID not found!'); // Error if account ID is not passed correctly
         }
     }
 
@@ -104,6 +112,7 @@ export default class AccountContact extends LightningElement {
             .then(() => {
                 this.showToast('Success', 'Contact created successfully', 'success');
                 this.showForm = false; // Hide the form
+                console.log('Form hidden, contact creation successful'); // Debug success
                 // Refresh the contacts list dynamically
                 return refreshApex(this.accounts);
             })
@@ -113,10 +122,11 @@ export default class AccountContact extends LightningElement {
                     errorMessage = error.body.message;
                 }
                 this.showToast('Error', errorMessage, 'error');
+                console.error('Error during contact creation:', error); // Debugging error
             });
     }
 
-    // Show toast messages
+    // Show toast messages for success or error
     showToast(title, message, variant) {
         const event = new ShowToastEvent({
             title,
@@ -129,5 +139,6 @@ export default class AccountContact extends LightningElement {
     // Cancel form display
     handleCancel() {
         this.showForm = false;
+        console.log('Form cancelled and hidden'); // Debug form cancel action
     }
 }
