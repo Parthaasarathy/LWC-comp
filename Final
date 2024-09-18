@@ -1,68 +1,133 @@
-public class ClaimApprovalProcess {
-    private static final Decimal APPROVED_LIMIT = 10000;
+<template>
+    <lightning-card title="Accounts and Contacts" icon-name="standard:account">
+        <template if:true={accounts}>
+            <table class="slds-table slds-table_bordered">
+                <thead>
+                    <tr>
+                        <th scope="col">Account Name</th>
+                        <th scope="col">Contacts</th>
+                        <th scope="col">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template for:each={accounts} for:item="account">
+                        <tr key={account.Id}>
+                            <td>{account.Name}</td>
+                            <td>
+                                <template if:true={account.Contacts}>
+                                    <ul>
+                                        <template for:each={account.Contacts} for:item="contact">
+                                            <li key={contact.Id}>
+                                                {contact.FirstName} {contact.LastName} - {contact.Email}
+                                            </li>
+                                        </template>
+                                    </ul>
+                                </template>
+                                <template if:false={account.Contacts}>
+                                    <p>No contacts</p>
+                                </template>
+                            </td>
+                            <td>
+                                <lightning-button label="Add Contact" data-account-id={account.Id} onclick={handleShowForm}></lightning-button>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </template>
+    </lightning-card>
 
-    public static void processClaims(List<Claim__c> claims) {
-        // Get the User Id of the claims manager named 'John Walker'
-        User claimsManager;
-        try {
-            claimsManager = [SELECT Id FROM User WHERE Name = 'John Walker' LIMIT 1];
-        } catch (Exception e) {
-            throw new CustomException('Manager not found: ' + e.getMessage());
-        }
+    <!-- Form for creating a new contact -->
+    <template if:true={showForm}>
+        <lightning-card title="Create Contact" icon-name="standard:contact">
+            <lightning-input label="First Name" name="firstName" value={newContact.firstName} onchange={handleInputChange}></lightning-input>
+            <lightning-input label="Last Name" name="lastName" value={newContact.lastName} onchange={handleInputChange}></lightning-input>
+            <lightning-input label="Email" name="email" value={newContact.email} onchange={handleInputChange}></lightning-input>
+            <lightning-button label="Save Contact" onclick={handleCreateContact} variant="brand"></lightning-button>
+            <lightning-button label="Cancel" onclick={handleCancel} class="slds-m-left_x-small"></lightning-button>
+        </lightning-card>
+    </template>
+</template>
 
-        // List to store claims to update
-        List<Claim__c> claimsToUpdate = new List<Claim__c>();
 
-        for (Claim__c claim : claims) {
-            if (claim.Claim_Amount__c <= APPROVED_LIMIT) {
-                // Update the status to 'Approved'
-                claim.Status__c = 'Approved';
-                claimsToUpdate.add(claim);
-                
-                // Send email notification
-                sendApprovalEmail(claim);
-            } else {
-                // Update the status to 'Requires Manual Review'
-                claim.Status__c = 'Requires Manual Review';
-                claim.OwnerId = claimsManager.Id;  // Assign to claims manager
-                claimsToUpdate.add(claim);
-            }
-        }
 
-        // Update the claims in the database
-        if (!claimsToUpdate.isEmpty()) {
-            update claimsToUpdate;
+import { LightningElement, wire, track } from 'lwc';
+import getAccountsAndContacts from '@salesforce/apex/AccountContactController.getAccountsAndContacts';
+import createContact from '@salesforce/apex/AccountContactController.createContact';
+import { ShowToastEvent } from 'lightning/platformShowToastEvent';
+import { refreshApex } from '@salesforce/apex';
+
+export default class AccountContact extends LightningElement {
+    @track accounts; // To store the account and contacts data
+    @track showForm = false; // Toggle to show the form
+    @track newContact = { firstName: '', lastName: '', email: '', accountId: '' }; // New contact information
+    @track selectedAccountId; // Store the selected account for creating a contact
+
+    // Fetch accounts and contacts data
+    @wire(getAccountsAndContacts)
+    wiredAccounts({ error, data }) {
+        if (data) {
+            this.accounts = data;
+        } else if (error) {
+            this.showToast('Error', 'Error fetching accounts', 'error');
         }
     }
-    
-    private static void sendApprovalEmail(Claim__c claim) {
-        // Construct the email message
-        Messaging.SingleEmailMessage email = new Messaging.SingleEmailMessage();
-        email.setToAddresses(new String[] {claim.Claimant_Email__c});
-        email.setSubject('Your Claim has been Approved');
-        email.setPlainTextBody('Dear Claimant, your claim with ID ' + claim.Id + ' has been approved.');
 
-        // Send the email
-        Messaging.sendEmail(new Messaging.SingleEmailMessage[] {email});
+    // Handle form field changes
+    handleInputChange(event) {
+        const field = event.target.name;
+        this.newContact[field] = event.target.value;
     }
-}
 
-
-trigger ClaimApprovalTrigger on Claim__c (after insert, after update) {
-    // Collect all claims with a status of 'Submitted' that need to be processed
-    List<Claim__c> claimsToProcess = new List<Claim__c>();
-
-    for (Claim__c claim : Trigger.new) {
-        // Check if the claim status is 'Submitted'
-        if (claim.Status__c == 'Submitted' &&
-            (Trigger.isInsert || 
-             (Trigger.isUpdate && claim.Status__c != Trigger.oldMap.get(claim.Id).Status__c))) {
-            claimsToProcess.add(claim);
+    // Show the contact creation form for the selected account
+    handleShowForm(event) {
+        const accountId = event.target.dataset.accountId;
+        console.log('Account ID:', accountId); // Debugging line to check if accountId is captured
+        if (accountId) {
+            this.selectedAccountId = accountId; // Set the selected accountId
+            this.showForm = true; // Display the form
+        } else {
+            console.error('Account ID not found!');
         }
     }
-    
-    // Only process the claims if there are any to process
-    if (!claimsToProcess.isEmpty()) {
-        ClaimApprovalProcess.processClaims(claimsToProcess);
+
+    // Handle contact creation
+    handleCreateContact() {
+        const { firstName, lastName, email } = this.newContact;
+
+        if (!firstName || !lastName || !email) {
+            this.showToast('Error', 'All fields are required', 'error');
+            return;
+        }
+
+        createContact({ firstName, lastName, email, accountId: this.selectedAccountId })
+            .then(() => {
+                this.showToast('Success', 'Contact created successfully', 'success');
+                this.showForm = false; // Hide the form
+                // Refresh the contacts list dynamically
+                return refreshApex(this.accounts);
+            })
+            .catch(error => {
+                let errorMessage = 'Error creating contact';
+                if (error.body && error.body.message) {
+                    errorMessage = error.body.message;
+                }
+                this.showToast('Error', errorMessage, 'error');
+            });
+    }
+
+    // Show toast messages
+    showToast(title, message, variant) {
+        const event = new ShowToastEvent({
+            title,
+            message,
+            variant,
+        });
+        this.dispatchEvent(event);
+    }
+
+    // Cancel form display
+    handleCancel() {
+        this.showForm = false;
     }
 }
