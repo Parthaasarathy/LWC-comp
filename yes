@@ -1,39 +1,21 @@
-public with sharing class AccountContactController {
-    
-    // Method to get a list of Contacts related to an Account
-    @AuraEnabled(cacheable=true)
-    public static List<Contact> getContacts(Id accountId) {
-        return [SELECT Id, FirstName, LastName, Email FROM Contact WHERE AccountId = :accountId];
-    }
-
-    // Method to create a new Contact
-    @AuraEnabled
-    public static String createContact(String firstName, String lastName, String email, Id accountId) {
-        try {
-            Contact newContact = new Contact(
-                FirstName = firstName,
-                LastName = lastName,
-                Email = email,
-                AccountId = accountId
-            );
-            insert newContact;
-            return 'Success';
-        } catch (Exception e) {
-            throw new AuraHandledException('Error creating contact: ' + e.getMessage());
-        }
-    }
-}
-
 import { LightningElement, wire, api, track } from 'lwc';
 import getContacts from '@salesforce/apex/AccountContactController.getContacts';
 import createContact from '@salesforce/apex/AccountContactController.createContact';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
+import { refreshApex } from '@salesforce/apex';
 
 export default class AccountContact extends LightningElement {
     @api recordId; // Account Id passed from the parent component or page
     @track contacts;
     @track error;
     @track newContact = { firstName: '', lastName: '', email: '' };
+
+    // Columns for lightning-datatable
+    columns = [
+        { label: 'First Name', fieldName: 'FirstName', type: 'text' },
+        { label: 'Last Name', fieldName: 'LastName', type: 'text' },
+        { label: 'Email', fieldName: 'Email', type: 'email' }
+    ];
 
     // Fetch contacts using the wire service
     @wire(getContacts, { accountId: '$recordId' })
@@ -57,6 +39,7 @@ export default class AccountContact extends LightningElement {
     handleCreateContact() {
         const { firstName, lastName, email } = this.newContact;
         
+        // Validate required fields
         if (!firstName || !lastName) {
             this.showToast('Error', 'First Name and Last Name are required', 'error');
             return;
@@ -65,14 +48,19 @@ export default class AccountContact extends LightningElement {
         createContact({ firstName, lastName, email, accountId: this.recordId })
             .then(() => {
                 this.showToast('Success', 'Contact created successfully', 'success');
-                return refreshApex(this.contacts); // Refresh the contacts list
+                // Refresh the contacts list after creating the new contact
+                return refreshApex(this.contacts);
             })
             .catch((error) => {
-                this.showToast('Error', error.body.message, 'error');
+                let errorMessage = 'Unknown error'; // Default message in case error structure is unexpected
+                if (error && error.body && error.body.message) {
+                    errorMessage = error.body.message;
+                }
+                this.showToast('Error', errorMessage, 'error');
             });
     }
 
-    // Show toast messages
+    // Show toast messages for success or error
     showToast(title, message, variant) {
         const event = new ShowToastEvent({
             title,
@@ -81,32 +69,4 @@ export default class AccountContact extends LightningElement {
         });
         this.dispatchEvent(event);
     }
-}
-
-
-<template>
-    <lightning-card title="Contacts for Account" icon-name="standard:account">
-        <!-- Display Contacts in a table -->
-        <template if:true={contacts}>
-            <lightning-datatable
-                key-field="Id"
-                data={contacts}
-                columns={columns}
-                hide-checkbox-column
-            ></lightning-datatable>
-        </template>
-        <template if:true={error}>
-            <div class="slds-text-color_error">{error}</div>
-        </template>
-
-        <!-- Form to create a new Contact -->
-        <lightning-input label="First Name" name="firstName" value={newContact.firstName} onchange={handleChange}></lightning-input>
-        <lightning-input label="Last Name" name="lastName" value={newContact.lastName} onchange={handleChange}></lightning-input>
-        <lightning-input label="Email" name="email" value={newContact.email} onchange={handleChange}></lightning-input>
-        <lightning-button label="Create Contact" onclick={handleCreateContact} class="slds-m-top_small" variant="brand"></lightning-button>
-    </lightning-card>
-</template>
-
-.slds-m-top_small {
-    margin-top: 1rem;
 }
