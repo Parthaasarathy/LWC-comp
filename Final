@@ -31,7 +31,7 @@
                                 <lightning-button 
                                     label="Add Contact" 
                                     data-account-id={account.Id} 
-                                    onclick={handleShowForm}> <!-- Ensure this event is properly set -->
+                                    onclick={handleShowForm}> <!-- Trigger the modal -->
                                 </lightning-button>
                             </td>
                         </tr>
@@ -41,18 +41,38 @@
         </template>
     </lightning-card>
 
-    <!-- Form for creating a new contact -->
+    <!-- Modal for creating a new contact -->
     <template if:true={showForm}>
-        <lightning-card title="Create Contact" icon-name="standard:contact">
-            <lightning-input label="First Name" name="firstName" value={newContact.firstName} onchange={handleInputChange}></lightning-input>
-            <lightning-input label="Last Name" name="lastName" value={newContact.lastName} onchange={handleInputChange}></lightning-input>
-            <lightning-input label="Email" name="email" value={newContact.email} onchange={handleInputChange}></lightning-input>
-            <lightning-button label="Save Contact" onclick={handleCreateContact} variant="brand"></lightning-button>
-            <lightning-button label="Cancel" onclick={handleCancel} class="slds-m-left_x-small"></lightning-button>
-        </lightning-card>
+        <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open">
+            <div class="slds-modal__container">
+                <!-- Modal/Popup Header -->
+                <header class="slds-modal__header">
+                    <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse" title="Close" onclick={handleCancel}>
+                        <lightning-icon icon-name="utility:close" alternative-text="close" size="small"></lightning-icon>
+                        <span class="slds-assistive-text">Close</span>
+                    </button>
+                    <h2 class="slds-text-heading_medium">Create Contact</h2>
+                </header>
+                
+                <!-- Modal/Popup Body -->
+                <div class="slds-modal__content slds-p-around_medium">
+                    <lightning-input label="First Name" name="firstName" value={newContact.firstName} onchange={handleInputChange}></lightning-input>
+                    <lightning-input label="Last Name" name="lastName" value={newContact.lastName} onchange={handleInputChange}></lightning-input>
+                    <lightning-input label="Email" name="email" value={newContact.email} onchange={handleInputChange}></lightning-input>
+                </div>
+                
+                <!-- Modal/Popup Footer -->
+                <footer class="slds-modal__footer">
+                    <lightning-button variant="neutral" label="Cancel" onclick={handleCancel}></lightning-button>
+                    <lightning-button variant="brand" label="Save Contact" onclick={handleCreateContact}></lightning-button>
+                </footer>
+            </div>
+        </section>
+
+        <!-- Modal Backdrop -->
+        <div class="slds-backdrop slds-backdrop_open"></div>
     </template>
 </template>
-
 
 
 import { LightningElement, wire, track } from 'lwc';
@@ -63,7 +83,7 @@ import { refreshApex } from '@salesforce/apex';
 
 export default class AccountContact extends LightningElement {
     @track accounts; // To store the account and contacts data
-    @track showForm = false; // Toggle to show the form
+    @track showForm = false; // Toggle to show the modal (popup form)
     @track newContact = { firstName: '', lastName: '', email: '', accountId: '' }; // New contact information
     @track selectedAccountId; // Store the selected account for creating a contact
 
@@ -72,10 +92,8 @@ export default class AccountContact extends LightningElement {
     wiredAccounts({ error, data }) {
         if (data) {
             this.accounts = data;
-            console.log('Accounts and Contacts fetched:', data); // Debugging the fetched data
         } else if (error) {
             this.showToast('Error', 'Error fetching accounts', 'error');
-            console.error('Error fetching accounts:', error); // Debugging errors if data fetching fails
         }
     }
 
@@ -85,17 +103,12 @@ export default class AccountContact extends LightningElement {
         this.newContact[field] = event.target.value;
     }
 
-    // Show the contact creation form for the selected account
+    // Show the contact creation modal for the selected account
     handleShowForm(event) {
         const accountId = event.target.dataset.accountId;
-        console.log('Add Contact Button Clicked! Account ID:', accountId); // Debugging line to check if accountId is captured
-        
         if (accountId) {
             this.selectedAccountId = accountId; // Set the selected accountId
-            this.showForm = true; // Display the form
-            console.log('Form should now be visible'); // Add this to check if the form visibility is toggling
-        } else {
-            console.error('Account ID not found!'); // Error if account ID is not passed correctly
+            this.showForm = true; // Open the modal (show the form)
         }
     }
 
@@ -111,8 +124,7 @@ export default class AccountContact extends LightningElement {
         createContact({ firstName, lastName, email, accountId: this.selectedAccountId })
             .then(() => {
                 this.showToast('Success', 'Contact created successfully', 'success');
-                this.showForm = false; // Hide the form
-                console.log('Form hidden, contact creation successful'); // Debug success
+                this.showForm = false; // Close the modal
                 // Refresh the contacts list dynamically
                 return refreshApex(this.accounts);
             })
@@ -122,8 +134,12 @@ export default class AccountContact extends LightningElement {
                     errorMessage = error.body.message;
                 }
                 this.showToast('Error', errorMessage, 'error');
-                console.error('Error during contact creation:', error); // Debugging error
             });
+    }
+
+    // Handle modal cancellation
+    handleCancel() {
+        this.showForm = false; // Close the modal when cancel is clicked
     }
 
     // Show toast messages for success or error
@@ -135,10 +151,19 @@ export default class AccountContact extends LightningElement {
         });
         this.dispatchEvent(event);
     }
+}
 
-    // Cancel form display
-    handleCancel() {
-        this.showForm = false;
-        console.log('Form cancelled and hidden'); // Debug form cancel action
-    }
+
+.slds-modal__container {
+    width: 50rem; /* Adjust width of the modal */
+    max-width: 100%;
+}
+
+.slds-modal__header {
+    background-color: #1589EE; /* Optional: Add a nice header color */
+    color: white;
+}
+
+.slds-modal__footer {
+    text-align: right;
 }
