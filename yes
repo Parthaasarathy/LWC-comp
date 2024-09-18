@@ -1,82 +1,112 @@
-public with sharing class StudentCourseController {
+public with sharing class AccountContactController {
+    
+    // Method to get a list of Contacts related to an Account
     @AuraEnabled(cacheable=true)
-    public static List<CourseWrapper> searchCourses(String searchTerm) {
-        String searchPattern = '%' + searchTerm + '%';
-        List<Course__c> courses = [
-            SELECT Id, Name, Number_Of_Seats__c, Number_of_Enrolled_Students__c, Instructor__r.Name
-            FROM Course__c
-            WHERE Name LIKE :searchPattern
-        ];
-        
-        List<CourseWrapper> courseWrappers = new List<CourseWrapper>();
-        for (Course__c course : courses) {
-            Integer availableSeats = Integer.valueOf(course.Number_Of_Seats__c) - Integer.valueOf(course.Number_of_Enrolled_Students__c != null ? course.Number_of_Enrolled_Students__c : 0);
-            courseWrappers.add(new CourseWrapper(course, availableSeats));
-        }
-        
-        return courseWrappers;
+    public static List<Contact> getContacts(Id accountId) {
+        return [SELECT Id, FirstName, LastName, Email FROM Contact WHERE AccountId = :accountId];
     }
 
-    public class CourseWrapper {
-        @AuraEnabled public String Id;
-        @AuraEnabled public String Name;
-        @AuraEnabled public String InstructorName;
-        @AuraEnabled public Integer AvailableSeats;
-
-        public CourseWrapper(Course__c course, Integer availableSeats) {
-            this.Id = course.Id;
-            this.Name = course.Name;
-            this.InstructorName = course.Instructor__r.Name;
-            this.AvailableSeats = availableSeats;
+    // Method to create a new Contact
+    @AuraEnabled
+    public static String createContact(String firstName, String lastName, String email, Id accountId) {
+        try {
+            Contact newContact = new Contact(
+                FirstName = firstName,
+                LastName = lastName,
+                Email = email,
+                AccountId = accountId
+            );
+            insert newContact;
+            return 'Success';
+        } catch (Exception e) {
+            throw new AuraHandledException('Error creating contact: ' + e.getMessage());
         }
+    }
+}
+
+import { LightningElement, wire, api, track } from 'lwc';
+import getContacts from '@salesforce/apex/AccountContactController.getContacts';
+import createContact from '@salesforce/apex/AccountContactController.createContact';
+import { ShowToastEvent } from 'lightning/platformShowToastEvent';
+
+export default class AccountContact extends LightningElement {
+    @api recordId; // Account Id passed from the parent component or page
+    @track contacts;
+    @track error;
+    @track newContact = { firstName: '', lastName: '', email: '' };
+
+    // Fetch contacts using the wire service
+    @wire(getContacts, { accountId: '$recordId' })
+    wiredContacts({ error, data }) {
+        if (data) {
+            this.contacts = data;
+            this.error = undefined;
+        } else if (error) {
+            this.error = error;
+            this.contacts = undefined;
+        }
+    }
+
+    // Handle form field changes
+    handleChange(event) {
+        const field = event.target.name;
+        this.newContact[field] = event.target.value;
+    }
+
+    // Create new contact on form submission
+    handleCreateContact() {
+        const { firstName, lastName, email } = this.newContact;
+        
+        if (!firstName || !lastName) {
+            this.showToast('Error', 'First Name and Last Name are required', 'error');
+            return;
+        }
+
+        createContact({ firstName, lastName, email, accountId: this.recordId })
+            .then(() => {
+                this.showToast('Success', 'Contact created successfully', 'success');
+                return refreshApex(this.contacts); // Refresh the contacts list
+            })
+            .catch((error) => {
+                this.showToast('Error', error.body.message, 'error');
+            });
+    }
+
+    // Show toast messages
+    showToast(title, message, variant) {
+        const event = new ShowToastEvent({
+            title,
+            message,
+            variant,
+        });
+        this.dispatchEvent(event);
     }
 }
 
 
 <template>
-    <lightning-card title="Course Search">
-        <div class="slds-p-around_medium">
-            <lightning-input label="Search Courses" value={searchTerm} onchange={handleInputChange} placeholder="Enter course name"></lightning-input>
-            <lightning-button variant="brand" label="Search" onclick={handleSearch}></lightning-button>
-        </div>
-        <template if:true={courses}>
-            <lightning-datatable key-field="Id" data={courses} columns={columns}>
-            </lightning-datatable>
+    <lightning-card title="Contacts for Account" icon-name="standard:account">
+        <!-- Display Contacts in a table -->
+        <template if:true={contacts}>
+            <lightning-datatable
+                key-field="Id"
+                data={contacts}
+                columns={columns}
+                hide-checkbox-column
+            ></lightning-datatable>
         </template>
+        <template if:true={error}>
+            <div class="slds-text-color_error">{error}</div>
+        </template>
+
+        <!-- Form to create a new Contact -->
+        <lightning-input label="First Name" name="firstName" value={newContact.firstName} onchange={handleChange}></lightning-input>
+        <lightning-input label="Last Name" name="lastName" value={newContact.lastName} onchange={handleChange}></lightning-input>
+        <lightning-input label="Email" name="email" value={newContact.email} onchange={handleChange}></lightning-input>
+        <lightning-button label="Create Contact" onclick={handleCreateContact} class="slds-m-top_small" variant="brand"></lightning-button>
     </lightning-card>
 </template>
 
-
-import { LightningElement, track } from 'lwc';
-import { ShowToastEvent } from 'lightning/platformShowToastEvent';
-import searchCourses from '@salesforce/apex/StudentCourseController.searchCourses';
-
-export default class StudentCourseSearch extends LightningElement {
-    @track searchTerm = '';
-    @track courses = [];
-    @track columns = [
-        { label: 'Course Name', fieldName: 'Name' },
-        { label: 'Instructor Name', fieldName: 'InstructorName' },
-        { label: 'Available Seats', fieldName: 'AvailableSeats', type: 'number' }
-    ];
-
-    handleInputChange(event) {
-        this.searchTerm = event.target.value;
-    }
-
-    handleSearch() {
-        searchCourses({ searchTerm: this.searchTerm })
-            .then(result => {
-                this.courses = result;
-            })
-            .catch(error => {
-                this.dispatchEvent(
-                    new ShowToastEvent({
-                        title: 'Error loading courses',
-                        message: error.body.message,
-                        variant: 'error',
-                    }),
-                );
-            });
-    }
+.slds-m-top_small {
+    margin-top: 1rem;
 }
