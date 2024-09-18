@@ -1,8 +1,17 @@
 public with sharing class AccountContactController {
 
     @AuraEnabled(cacheable=true)
-    public static List<Account> getAccountsAndContacts() {
-        return [SELECT Id, Name, (SELECT Id, FirstName, LastName, Email FROM Contacts) FROM Account LIMIT 10];
+    public static List<Account> getAccountsAndContacts(String accountIds) {
+        String query = 'SELECT Id, Name, (SELECT Id, FirstName, LastName, Email FROM Contacts) FROM Account';
+        
+        // Dynamically add WHERE clause if accountIds are provided
+        if (accountIds != null && accountIds != '') {
+            query += ' WHERE Id IN (' + accountIds + ')';
+        }
+        
+        // Execute the dynamic query
+        List<Account> accounts = Database.query(query);
+        return accounts;
     }
 
     @AuraEnabled
@@ -30,17 +39,22 @@ import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import { refreshApex } from '@salesforce/apex';
 
 export default class AccountContact extends LightningElement {
-    @track accounts; // To store the account and contacts data
-    @track showForm = false; // Toggle to show the form
-    @track newContact = { firstName: '', lastName: '', email: '', accountId: '' }; // New contact information
-    @track selectedAccountId; // Store the selected account for creating a contact
+    @track accounts;
+    @track showForm = false;
+    @track newContact = { firstName: '', lastName: '', email: '', accountId: '' };
+    @track selectedAccountId;
+    wiredAccountsResult;
 
-    // Fetch accounts and contacts data
-    @wire(getAccountsAndContacts)
-    wiredAccounts({ error, data }) {
-        if (data) {
-            this.accounts = data;
-        } else if (error) {
+    // Example list of account IDs (you can dynamically update this)
+    accountIds = "'0015g00000KoEc8AAF', '0015g00000KoEe9AAF'"; // Example IDs
+
+    // Fetch accounts and contacts data based on dynamic account IDs
+    @wire(getAccountsAndContacts, { accountIds: '$accountIds' }) // Dynamically pass the account IDs
+    wiredAccounts(result) {
+        this.wiredAccountsResult = result;
+        if (result.data) {
+            this.accounts = result.data;
+        } else if (result.error) {
             this.showToast('Error', 'Error fetching accounts', 'error');
         }
     }
@@ -51,11 +65,13 @@ export default class AccountContact extends LightningElement {
         this.newContact[field] = event.target.value;
     }
 
-    // Show the contact creation form for the selected account
+    // Show the contact creation modal for the selected account
     handleShowForm(event) {
         const accountId = event.target.dataset.accountId;
-        this.selectedAccountId = accountId; // Set the selected accountId
-        this.showForm = true; // Display the form
+        if (accountId) {
+            this.selectedAccountId = accountId;
+            this.showForm = true;
+        }
     }
 
     // Handle contact creation
@@ -70,9 +86,9 @@ export default class AccountContact extends LightningElement {
         createContact({ firstName, lastName, email, accountId: this.selectedAccountId })
             .then(() => {
                 this.showToast('Success', 'Contact created successfully', 'success');
-                this.showForm = false; // Hide the form
-                // Refresh the contacts list dynamically
-                return refreshApex(this.accounts);
+                this.showForm = false;
+                // Refresh the accounts list
+                return refreshApex(this.wiredAccountsResult);
             })
             .catch(error => {
                 let errorMessage = 'Error creating contact';
@@ -81,6 +97,11 @@ export default class AccountContact extends LightningElement {
                 }
                 this.showToast('Error', errorMessage, 'error');
             });
+    }
+
+    // Handle modal cancellation
+    handleCancel() {
+        this.showForm = false;
     }
 
     // Show toast messages
@@ -92,66 +113,4 @@ export default class AccountContact extends LightningElement {
         });
         this.dispatchEvent(event);
     }
-
-    // Cancel form display
-    handleCancel() {
-        this.showForm = false;
-    }
-}
-
-
-<template>
-    <lightning-card title="Accounts and Contacts" icon-name="standard:account">
-        <template if:true={accounts}>
-            <table class="slds-table slds-table_bordered">
-                <thead>
-                    <tr>
-                        <th scope="col">Account Name</th>
-                        <th scope="col">Contacts</th>
-                        <th scope="col">Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <template for:each={accounts} for:item="account">
-                        <tr key={account.Id}>
-                            <td>{account.Name}</td>
-                            <td>
-                                <template if:true={account.Contacts}>
-                                    <ul>
-                                        <template for:each={account.Contacts} for:item="contact">
-                                            <li key={contact.Id}>
-                                                {contact.FirstName} {contact.LastName} - {contact.Email}
-                                            </li>
-                                        </template>
-                                    </ul>
-                                </template>
-                                <template if:false={account.Contacts}>
-                                    <p>No contacts</p>
-                                </template>
-                            </td>
-                            <td>
-                                <lightning-button label="Add Contact" data-account-id={account.Id} onclick={handleShowForm}></lightning-button>
-                            </td>
-                        </tr>
-                    </template>
-                </tbody>
-            </table>
-        </template>
-    </lightning-card>
-
-    <!-- Form for creating a new contact -->
-    <template if:true={showForm}>
-        <lightning-card title="Create Contact" icon-name="standard:contact">
-            <lightning-input label="First Name" name="firstName" value={newContact.firstName} onchange={handleInputChange}></lightning-input>
-            <lightning-input label="Last Name" name="lastName" value={newContact.lastName} onchange={handleInputChange}></lightning-input>
-            <lightning-input label="Email" name="email" value={newContact.email} onchange={handleInputChange}></lightning-input>
-            <lightning-button label="Save Contact" onclick={handleCreateContact} variant="brand"></lightning-button>
-            <lightning-button label="Cancel" onclick={handleCancel} class="slds-m-left_x-small"></lightning-button>
-        </lightning-card>
-    </template>
-</template>
-
-
-.slds-m-left_x-small {
-    margin-left: 0.5rem;
 }
